@@ -20,6 +20,15 @@ import { LogPanel } from './components/LogPanel';
 import { Palette } from './components/Palette';
 import { saveGraph, executeGraph, loadGraphs, API_BASE } from './api/client';
 
+const nodeTypes = {
+  input_node: InputNode,
+  llm_node: LLMNode,
+  toolbox: ToolboxNode,
+  output_node: OutputNode,
+  if_else_node: IfElseNode,
+  while_node: WhileNode,
+};
+
 const App: React.FC = () => {
   const { 
     nodes, 
@@ -37,15 +46,6 @@ const App: React.FC = () => {
   const { screenToFlowPosition } = useReactFlow();
   const [logs, setLogs] = useState<any[]>([]);
   const [isLogOpen, setIsLogOpen] = useState(false);
-
-  const nodeTypes = useMemo(() => ({
-    input_node: InputNode,
-    llm_node: LLMNode,
-    toolbox: ToolboxNode,
-    output_node: OutputNode,
-    if_else_node: IfElseNode,
-    while_node: WhileNode,
-  }), []);
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
