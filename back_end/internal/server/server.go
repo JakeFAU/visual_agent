@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/JakeFAU/visual_agent/internal/compiler"
 	"github.com/JakeFAU/visual_agent/internal/graph"
@@ -89,29 +90,41 @@ type ExecuteRequest struct {
 }
 
 func (s *Server) Execute(c *gin.Context) {
+	fmt.Println("[DEBUG] Execute endpoint called")
 	var req ExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		fmt.Printf("[DEBUG] Bind JSON failed: %v\n", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
+	fmt.Printf("[DEBUG] Compiling graph: %s\n", req.Graph.Name)
 	compiled, err := s.compiler.Compile(req.Graph)
 	if err != nil {
+		fmt.Printf("[DEBUG] Compilation failed: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("compilation failed: %v", err)})
 		return
 	}
 
 	rt := runtime.NewLocalRuntime()
+	
+	fmt.Println("[DEBUG] Starting SSE stream")
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("Transfer-Encoding", "chunked")
 
 	c.Stream(func(_ io.Writer) bool {
+		fmt.Println("[DEBUG] Entering execution loop")
 		for event, err := range rt.Execute(c.Request.Context(), compiled, req.Input) {
 			if err != nil {
+				fmt.Printf("[DEBUG] Execution error: %v\n", err)
 				data, _ := json.Marshal(gin.H{"type": "error", "content": err.Error()})
 				c.SSEvent("message", string(data))
 				return false
 			}
 			if event != nil {
-				// Wrap the ADK event in our standard response type
+				fmt.Printf("[DEBUG] Received ADK event from author: %s\n", event.Author)
 				data, _ := json.Marshal(gin.H{
 					"type":    "agent_event",
 					"content": event,
@@ -120,6 +133,7 @@ func (s *Server) Execute(c *gin.Context) {
 				c.SSEvent("message", string(data))
 			}
 		}
+		fmt.Println("[DEBUG] Execution loop finished")
 		data, _ := json.Marshal(gin.H{"type": "done", "content": "execution complete"})
 		c.SSEvent("message", string(data))
 		return false
