@@ -73,13 +73,13 @@ type Node struct {
 }
 
 type Edge struct {
-	ID         string `json:"id"`
-	Source     string `json:"source"`
-	SourcePort string `json:"source_port"`
-	Target     string `json:"target"`
-	TargetPort string `json:"target_port"`
-	DataType   string `json:"data_type"`
-	EdgeKind   string `json:"edge_kind"`
+	ID         string `json:"id" mapstructure:"id"`
+	Source     string `json:"source" mapstructure:"source"`
+	SourcePort string `json:"source_port" mapstructure:"source_port"`
+	Target     string `json:"target" mapstructure:"target"`
+	TargetPort string `json:"target_port" mapstructure:"target_port"`
+	DataType   string `json:"data_type" mapstructure:"data_type"`
+	EdgeKind   string `json:"edge_kind" mapstructure:"edge_kind"`
 }
 
 type Graph struct {

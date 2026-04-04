@@ -44,12 +44,32 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 	outputMappings := make(map[string][]string)
 	toolsetMappings := make(map[string][]tool.Toolset)
 	toolboxResults := make(map[string][]tool.Toolset)
+	outputNodeKeys := make(map[string]string)
+
+	for _, node := range g.Nodes {
+		if node.Type != "output_node" {
+			continue
+		}
+
+		cfg, ok := node.Config.(graph.OutputNodeConfig)
+		if !ok || cfg.OutputKey == "" {
+			continue
+		}
+
+		outputNodeKeys[node.ID] = cfg.OutputKey
+	}
 
 	for _, edge := range g.Edges {
 		if edge.TargetPort == "in_toolbox" {
 			continue
 		}
-		outputMappings[edge.Source] = append(outputMappings[edge.Source], edge.TargetPort)
+
+		outputKey := edge.TargetPort
+		if mappedKey, ok := outputNodeKeys[edge.Target]; ok {
+			outputKey = mappedKey
+		}
+
+		outputMappings[edge.Source] = append(outputMappings[edge.Source], outputKey)
 	}
 
 	// 3. First Pass: Compile toolbox nodes

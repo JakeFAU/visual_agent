@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import ReactFlow, { 
   Background, 
   Controls, 
@@ -19,6 +19,16 @@ import { SidePanel } from './components/SidePanel';
 import { LogPanel } from './components/LogPanel';
 import { Palette } from './components/Palette';
 import { saveGraph, executeGraph, loadGraphs, API_BASE } from './api/client';
+import { extractDisplayContent, extractFinalResponse, isFinalAgentResponse } from './utils/execution';
+
+const nodeTypes = {
+  input_node: InputNode,
+  llm_node: LLMNode,
+  toolbox: ToolboxNode,
+  output_node: OutputNode,
+  if_else_node: IfElseNode,
+  while_node: WhileNode,
+};
 
 const App: React.FC = () => {
   const { 
@@ -37,15 +47,7 @@ const App: React.FC = () => {
   const { screenToFlowPosition } = useReactFlow();
   const [logs, setLogs] = useState<any[]>([]);
   const [isLogOpen, setIsLogOpen] = useState(false);
-
-  const nodeTypes = useMemo(() => ({
-    input_node: InputNode,
-    llm_node: LLMNode,
-    toolbox: ToolboxNode,
-    output_node: OutputNode,
-    if_else_node: IfElseNode,
-    while_node: WhileNode,
-  }), []);
+  const [finalResponse, setFinalResponse] = useState<string | null>(null);
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -113,26 +115,29 @@ const App: React.FC = () => {
     const userInput = window.prompt("Enter agent input:", "Hello, who are you?");
     if (userInput === null) return;
 
+    setFinalResponse(null);
     setIsLogOpen(true);
     addLog('info', 'Starting execution...');
     
     const graph = exportGraph();
+    const outputKeys = graph.nodes
+      .filter((node: any) => node.type === 'output_node')
+      .map((node: any) => node.config.output_key)
+      .filter(Boolean);
+
     try {
         await executeGraph(graph, userInput, (event) => {
-            console.log("[DEBUG] IDE Received Event:", event);
-            const logType = event.type === 'agent_event' ? (event.author || 'agent') : event.type;
+            console.log("[DEBUG] IDE Received Event:", JSON.stringify(event, null, 2));
             
-            let logContent = event.content;
-            if (event.type === 'agent_event' && event.content?.Content?.Parts) {
-                const text = event.content.Content.Parts.map((p: any) => p.Text).join('');
-                if (text) logContent = text;
-            } else if (event.type === 'agent_event' && event.content?.content?.parts) {
-                // Handle different casing from backend if necessary
-                const text = event.content.content.parts.map((p: any) => p.text).join('');
-                if (text) logContent = text;
-            }
+            const logType = event.type === 'agent_event' ? (event.author || 'agent') : event.type;
+            const responseText = extractFinalResponse(event, outputKeys);
+            const logContent = responseText ?? extractDisplayContent(event, outputKeys) ?? event.content;
 
             addLog(logType, logContent);
+
+            if (isFinalAgentResponse(event) && responseText) {
+                setFinalResponse(responseText);
+            }
         });
     } catch (e) {
         addLog('error', `Execution failed: ${e}`);
@@ -205,9 +210,13 @@ const App: React.FC = () => {
           
           <LogPanel 
             logs={logs} 
+            response={finalResponse}
             isOpen={isLogOpen} 
             onToggle={() => setIsLogOpen(!isLogOpen)} 
-            onClear={() => setLogs([])}
+            onClear={() => {
+              setLogs([]);
+              setFinalResponse(null);
+            }}
           />
         </div>
         <SidePanel />

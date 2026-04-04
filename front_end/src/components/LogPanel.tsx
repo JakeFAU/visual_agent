@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Terminal, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { Terminal, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface LogEntry {
   type: string;
@@ -9,12 +9,13 @@ interface LogEntry {
 
 interface LogPanelProps {
   logs: LogEntry[];
+  response: string | null;
   isOpen: boolean;
   onToggle: () => void;
   onClear: () => void;
 }
 
-export const LogPanel: React.FC<LogPanelProps> = ({ logs, isOpen, onToggle, onClear }) => {
+export const LogPanel: React.FC<LogPanelProps> = ({ logs, response, isOpen, onToggle, onClear }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,7 +44,13 @@ export const LogPanel: React.FC<LogPanelProps> = ({ logs, isOpen, onToggle, onCl
       </div>
 
       {isOpen && (
-        <div ref={scrollRef} className="h-54 overflow-y-auto p-4 font-mono text-[11px] space-y-1 custom-scrollbar">
+        <div ref={scrollRef} className="h-[calc(100%-40px)] overflow-y-auto p-4 font-mono text-[11px] space-y-1 custom-scrollbar">
+          {response && (
+            <div className="mb-4 rounded border border-green-500/20 bg-green-950/20 p-3">
+              <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-green-400">Final Response</div>
+              <div className="font-sans text-sm leading-6 text-gray-100 whitespace-pre-wrap break-words">{response}</div>
+            </div>
+          )}
           {logs.map((log, i) => (
             <div key={i} className="flex gap-3 animate-in fade-in duration-300">
               <span className="text-gray-600 shrink-0">[{log.timestamp.toLocaleTimeString()}]</span>
@@ -54,11 +61,11 @@ export const LogPanel: React.FC<LogPanelProps> = ({ logs, isOpen, onToggle, onCl
                 {log.type}
               </span>
               <span className="text-gray-300 break-all">
-                {typeof log.content === 'string' ? log.content : JSON.stringify(log.content)}
+                {typeof log.content === 'string' ? log.content : (log.content?.message || JSON.stringify(log.content))}
               </span>
             </div>
           ))}
-          {logs.length === 0 && (
+          {logs.length === 0 && !response && (
             <div className="h-full flex items-center justify-center text-gray-600 italic">
               No execution data. Click "Deploy" to start.
             </div>

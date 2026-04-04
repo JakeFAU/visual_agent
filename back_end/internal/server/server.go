@@ -111,7 +111,7 @@ func (s *Server) Execute(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
-	c.Header("Transfer-Encoding", "chunked")
+	c.Header("X-Accel-Buffering", "no") // Prevent proxy buffering (Nginx)
 
 	c.Stream(func(_ io.Writer) bool {
 		fmt.Println("[DEBUG] Entering execution loop")
@@ -119,7 +119,7 @@ func (s *Server) Execute(c *gin.Context) {
 			if err != nil {
 				fmt.Printf("[DEBUG] Execution error: %v\n", err)
 				data, _ := json.Marshal(gin.H{"type": "error", "content": err.Error()})
-				c.SSEvent("message", string(data))
+				fmt.Fprintf(c.Writer, "data: %s\n\n", string(data))
 				c.Writer.Flush()
 				return false
 			}
@@ -130,13 +130,13 @@ func (s *Server) Execute(c *gin.Context) {
 					"content": event,
 					"author":  event.Author,
 				})
-				c.SSEvent("message", string(data))
+				fmt.Fprintf(c.Writer, "data: %s\n\n", string(data))
 				c.Writer.Flush()
 			}
 		}
 		fmt.Println("[DEBUG] Execution loop finished, sending done")
 		data, _ := json.Marshal(gin.H{"type": "done", "content": "execution complete"})
-		c.SSEvent("message", string(data))
+		fmt.Fprintf(c.Writer, "data: %s\n\n", string(data))
 		c.Writer.Flush()
 		return false
 	})
