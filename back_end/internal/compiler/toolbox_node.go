@@ -1,15 +1,45 @@
 package compiler
 
 import (
+	"fmt"
+	"os/exec"
 	"github.com/JakeFAU/visual_agent/internal/graph"
-	"google.golang.org/adk/agent"
+	"google.golang.org/adk/tool"
+	"google.golang.org/adk/tool/mcptoolset"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type ToolboxNodeCompiler struct{}
 
-func (c *ToolboxNodeCompiler) Compile(node graph.Node, metadata map[string]interface{}) (agent.Agent, error) {
-	// For v0, Toolbox nodes are processed during LLM node compilation 
-	// or handled as a separate orchestrator. 
-	// Returning nil here to satisfy the interface for now.
-	return nil, nil
+func (c *ToolboxNodeCompiler) Compile(node graph.Node, metadata map[string]interface{}) (interface{}, error) {
+	cfg, ok := node.Config.(graph.ToolboxNodeConfig)
+	if !ok {
+		return nil, fmt.Errorf("invalid config for toolbox")
+	}
+
+	var toolsets []tool.Toolset
+
+	// 1. MCP Servers
+	for _, mcpCfg := range cfg.MCPServers {
+		cmd := exec.Command(mcpCfg.Command, mcpCfg.Args...)
+		// Set environment variables if provided
+		if len(mcpCfg.Env) > 0 {
+			for k, v := range mcpCfg.Env {
+				cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+			}
+		}
+
+		mcpTools, err := mcptoolset.New(mcptoolset.Config{
+			Transport: &mcp.CommandTransport{Command: cmd},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize MCP server %s: %w", mcpCfg.Name, err)
+		}
+		toolsets = append(toolsets, mcpTools)
+	}
+
+	// 2. Custom Functions (Declarations only for now)
+	// In v0, we'll focus on MCP and Built-ins.
+
+	return toolsets, nil
 }

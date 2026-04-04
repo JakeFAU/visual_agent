@@ -12,7 +12,7 @@ import (
 
 type IfElseNodeCompiler struct{}
 
-func (c *IfElseNodeCompiler) Compile(node graph.Node, metadata map[string]interface{}) (agent.Agent, error) {
+func (c *IfElseNodeCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
 	cfg, ok := node.Config.(graph.IfElseNodeConfig)
 	if !ok {
 		return nil, fmt.Errorf("invalid config for if_else_node")
@@ -77,7 +77,7 @@ func (c *IfElseNodeCompiler) Compile(node graph.Node, metadata map[string]interf
 
 type WhileNodeCompiler struct{}
 
-func (c *WhileNodeCompiler) Compile(node graph.Node, metadata map[string]interface{}) (agent.Agent, error) {
+func (c *WhileNodeCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
 	cfg, ok := node.Config.(graph.WhileNodeConfig)
 	if !ok {
 		return nil, fmt.Errorf("invalid config for while_node")

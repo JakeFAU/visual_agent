@@ -4,16 +4,16 @@ import (
 	"context"
 	"fmt"
 	"github.com/JakeFAU/visual_agent/internal/graph"
-	"google.golang.org/adk/agent"
 	"google.golang.org/adk/agent/llmagent"
 	"google.golang.org/adk/model/gemini"
     "google.golang.org/genai"
+    "google.golang.org/adk/tool"
     "encoding/json"
 )
 
 type LLMNodeCompiler struct{}
 
-func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface{}) (agent.Agent, error) {
+func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
 	cfg, ok := node.Config.(graph.LLMNodeConfig)
 	if !ok {
 		return nil, fmt.Errorf("invalid config for llm_node")
@@ -33,7 +33,6 @@ func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface
 	}
 
 	if cfg.ResponseMode == "json" && cfg.OutputSchema != nil {
-        // Convert map[string]interface{} to *genai.Schema
         schemaBytes, _ := json.Marshal(cfg.OutputSchema)
         var schema genai.Schema
         if err := json.Unmarshal(schemaBytes, &schema); err != nil {
@@ -46,6 +45,11 @@ func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface
 	if keys, ok := metadata["output_keys"].([]string); ok && len(keys) > 0 {
 		llmCfg.OutputKey = keys[0]
 	}
+
+    // Apply toolsets if present
+    if toolsets, ok := metadata["toolsets"].([]tool.Toolset); ok {
+        llmCfg.Toolsets = toolsets
+    }
 
 	agentInstance, err := llmagent.New(llmCfg)
 	if err != nil {

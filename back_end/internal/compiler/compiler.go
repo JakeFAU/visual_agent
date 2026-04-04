@@ -5,11 +5,13 @@ import (
 	"github.com/JakeFAU/visual_agent/internal/graph"
 	"google.golang.org/adk/agent"
 	"google.golang.org/adk/agent/workflowagents/sequentialagent"
+	"google.golang.org/adk/tool"
 )
 
 // NodeCompiler translates a specific graph node into its ADK representation
+// interface{} (any) allows nodes to return agents, toolsets, or other configs.
 type NodeCompiler interface {
-	Compile(node graph.Node, metadata map[string]interface{}) (agent.Agent, error)
+	Compile(node graph.Node, metadata map[string]interface{}) (any, error)
 }
 
 // Compiler orchestrates the translation of a full Graph
@@ -28,40 +30,77 @@ func (c *Compiler) Register(nodeType string, nc NodeCompiler) {
 }
 
 func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
-	// 1. Sort nodes topologically to ensure no cycles and valid execution order
+	// 1. Sort nodes topologically to ensure valid execution order
 	sorted, err := c.sortNodes(g)
 	if err != nil {
 		return nil, fmt.Errorf("graph validation failed: %w", err)
 	}
 
-	// 2. Map edges to determine data flow state keys
-	// nodeID -> list of output keys it should set
+	// 2. Pre-pass: Identify data flow state keys and toolset connections
 	outputMappings := make(map[string][]string)
+	toolsetMappings := make(map[string][]tool.Toolset)
+    
+    // Intermediate storage for compiled toolsets
+    toolboxResults := make(map[string][]tool.Toolset)
+
 	for _, edge := range g.Edges {
+        if edge.TargetPort == "in_toolbox" {
+            // This is a toolset connection
+            continue 
+        }
 		outputMappings[edge.Source] = append(outputMappings[edge.Source], edge.TargetPort)
 	}
 
-	// 3. Compile individual agents
+	// 3. First Pass: Compile toolbox nodes
+	for _, node := range g.Nodes {
+		if node.Type == "toolbox" {
+			nc, ok := c.compilers[node.Type]
+			if !ok { continue }
+			
+			res, err := nc.Compile(node, nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to compile toolbox %s: %w", node.ID, err)
+			}
+			if toolsets, ok := res.([]tool.Toolset); ok {
+				toolboxResults[node.ID] = toolsets
+			}
+		}
+	}
+
+	// 4. Map toolsets to LLM nodes
+	for _, edge := range g.Edges {
+		if edge.TargetPort == "in_toolbox" {
+			if toolsets, ok := toolboxResults[edge.Source]; ok {
+				toolsetMappings[edge.Target] = append(toolsetMappings[edge.Target], toolsets...)
+			}
+		}
+	}
+
+	// 5. Second Pass: Compile execution nodes (LLM, If/Else, etc.)
 	var agents []agent.Agent
 	for _, node := range sorted {
+        // Skip toolbox nodes in execution path
+        if node.Type == "toolbox" { continue }
+
 		nc, ok := c.compilers[node.Type]
-		if !ok {
-			// Skip nodes like input/output for now if not registered
-			continue
-		}
+		if !ok { continue }
 
 		metadata := map[string]interface{}{
 			"output_keys": outputMappings[node.ID],
+			"toolsets":    toolsetMappings[node.ID],
 		}
 
-		compiled, err := nc.Compile(node, metadata)
+		res, err := nc.Compile(node, metadata)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compile node %s: %w", node.ID, err)
 		}
-		agents = append(agents, compiled)
+		
+		if a, ok := res.(agent.Agent); ok {
+			agents = append(agents, a)
+		}
 	}
 
-	// 4. Wrap in a SequentialAgent for now (simplest pattern)
+	// 6. Wrap in a SequentialAgent
 	if len(agents) == 1 {
 		return agents[0], nil
 	}
