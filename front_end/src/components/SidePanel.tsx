@@ -4,9 +4,10 @@ import { Accordion } from './ui/Accordion';
 import { ToolListEditor } from './editors/ToolListEditor';
 import { MCPServerEditor } from './editors/MCPServerEditor';
 import { CustomFunctionEditor } from './editors/CustomFunctionEditor';
+import { SchemaFieldBuilder } from './editors/SchemaFieldBuilder';
 
 export const SidePanel: React.FC = () => {
-  const { selectedNodeId, nodes, updateNodeConfig } = useGraphStore();
+  const { selectedNodeId, nodes, updateNodeConfig, name: graphName } = useGraphStore();
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
 
   if (!selectedNode) {
@@ -100,6 +101,15 @@ export const SidePanel: React.FC = () => {
                 </button>
               </div>
             </div>
+            {config.response_mode === 'json' && (
+                <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Output Schema</label>
+                    <SchemaFieldBuilder 
+                        schema={config.output_schema || { type: 'object', properties: {} }} 
+                        onChange={(s) => handleChange('output_schema', s)}
+                    />
+                </div>
+            )}
           </div>
         )}
 
@@ -147,7 +157,7 @@ export const SidePanel: React.FC = () => {
                         value={config.condition}
                         onChange={(e) => handleChange('condition', e.target.value)}
                         className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 h-24 resize-none"
-                        placeholder="e.g. $.category == 'billing'"
+                        placeholder="e.g. state.category == 'billing'"
                     />
                 </div>
                 {selectedNode.type === 'while_node' && (

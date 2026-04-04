@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import ReactFlow, { 
   Background, 
   Controls, 
@@ -14,6 +14,8 @@ import { OutputNode } from './components/nodes/OutputNode';
 import { IfElseNode } from './components/nodes/IfElseNode';
 import { WhileNode } from './components/nodes/WhileNode';
 import { SidePanel } from './components/SidePanel';
+import { LogPanel } from './components/LogPanel';
+import { saveGraph, executeGraph, loadGraphs } from './api/client';
 
 const App: React.FC = () => {
   const { 
@@ -23,8 +25,12 @@ const App: React.FC = () => {
     onEdgesChange, 
     onConnect,
     exportGraph,
-    importGraph
+    importGraph,
+    name
   } = useGraphStore();
+
+  const [logs, setLogs] = useState<any[]>([]);
+  const [isLogOpen, setIsLogOpen] = useState(false);
 
   const nodeTypes = useMemo(() => ({
     input_node: InputNode,
@@ -35,50 +41,61 @@ const App: React.FC = () => {
     while_node: WhileNode,
   }), []);
 
-  const handleExport = () => {
+  const handleSave = async () => {
     const graph = exportGraph();
-    const blob = new Blob([JSON.stringify(graph, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${graph.name}.json`;
-    link.click();
+    try {
+        await saveGraph(graph);
+        addLog('info', `Graph '${graph.name}' saved successfully.`);
+    } catch (e) {
+        addLog('error', `Failed to save graph: ${e}`);
+    }
+  };
+
+  const handleDeploy = async () => {
+    const userInput = window.prompt("Enter agent input:", "Hello, who are you?");
+    if (userInput === null) return;
+
+    setIsLogOpen(true);
+    addLog('info', 'Starting execution...');
+    
+    const graph = exportGraph();
+    try {
+        await executeGraph(graph, userInput, (event) => {
+            addLog(event.type || 'message', event.content || event);
+        });
+    } catch (e) {
+        addLog('error', `Execution failed: ${e}`);
+    }
+  };
+
+  const addLog = (type: string, content: any) => {
+    setLogs(prev => [...prev, { type, content, timestamp: new Date() }]);
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-950 text-gray-100">
-      <header className="h-14 border-b border-gray-800 flex items-center justify-between px-6 bg-gray-900">
+    <div className="flex flex-col h-screen bg-gray-950 text-gray-100 overflow-hidden">
+      <header className="h-14 border-b border-gray-800 flex items-center justify-between px-6 bg-gray-900 shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center font-bold text-xs">V</div>
-          <span className="font-bold tracking-tight">Visual Agent</span>
+          <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center font-bold text-xs shadow-lg shadow-blue-900/20 text-white">V</div>
+          <span className="font-bold tracking-tight text-white">Visual Agent <span className="text-gray-600 font-normal ml-1">IDE</span></span>
         </div>
         <div className="flex gap-3">
           <button 
-            className="px-4 py-1.5 rounded bg-gray-800 border border-gray-700 text-sm font-medium hover:bg-gray-700 transition-colors"
-            onClick={() => {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.onchange = (e: any) => {
-                    const file = e.target.files[0];
-                    const reader = new FileReader();
-                    reader.onload = (re) => importGraph(re.target?.result as string);
-                    reader.readAsText(file);
-                };
-                input.click();
-            }}
+            className="px-4 py-1.5 rounded bg-gray-800 border border-gray-700 text-[11px] font-bold uppercase tracking-widest text-gray-400 hover:bg-gray-700 transition-all active:scale-95"
+            onClick={handleSave}
           >
-            Import
+            Save
           </button>
           <button 
-            className="px-4 py-1.5 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-colors shadow-lg shadow-blue-900/20"
-            onClick={handleExport}
+            className="px-4 py-1.5 rounded bg-blue-600 text-white text-[11px] font-bold uppercase tracking-widest hover:bg-blue-500 transition-all shadow-lg shadow-blue-900/30 active:scale-95"
+            onClick={handleDeploy}
           >
             Export & Deploy
           </button>
         </div>
       </header>
 
-      <main className="flex-1 flex overflow-hidden">
+      <main className="flex-1 flex overflow-hidden relative">
         <div className="flex-1 relative">
           <ReactFlow
             nodes={nodes}
@@ -89,16 +106,23 @@ const App: React.FC = () => {
             nodeTypes={nodeTypes}
             fitView
           >
-            <Background color="#333" gap={20} />
-            <Controls />
-            <Panel position="top-left" className="bg-gray-900 border border-gray-800 p-2 rounded shadow-xl">
-                <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Status</div>
+            <Background color="#222" gap={20} variant={Background.Lines as any} />
+            <Controls className="!bg-gray-900 !border-gray-800 shadow-2xl" />
+            <Panel position="top-left" className="bg-gray-900/80 backdrop-blur-md border border-gray-800 p-2 rounded shadow-xl">
+                <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Graph Status</div>
                 <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                    <span className="text-xs font-medium">IDE Ready</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-sm shadow-green-500"></div>
+                    <span className="text-[10px] font-semibold text-gray-300">{name}</span>
                 </div>
             </Panel>
           </ReactFlow>
+          
+          <LogPanel 
+            logs={logs} 
+            isOpen={isLogOpen} 
+            onToggle={() => setIsLogOpen(!isLogOpen)} 
+            onClear={() => setLogs([])}
+          />
         </div>
         <SidePanel />
       </main>
