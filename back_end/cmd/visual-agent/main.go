@@ -10,6 +10,8 @@ import (
 	"github.com/JakeFAU/visual_agent/internal/config"
 	"github.com/JakeFAU/visual_agent/internal/graph"
 	"github.com/JakeFAU/visual_agent/internal/runtime"
+	"github.com/JakeFAU/visual_agent/internal/server"
+	"github.com/JakeFAU/visual_agent/internal/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -44,20 +46,17 @@ func main() {
 				return fmt.Errorf("failed to unmarshal JSON: %w", err)
 			}
 
-			// 1. Initialize Compiler
 			c := compiler.New()
 			c.Register("llm_node", &compiler.LLMNodeCompiler{})
 			c.Register("toolbox", &compiler.ToolboxNodeCompiler{})
 			c.Register("if_else_node", &compiler.IfElseNodeCompiler{})
 			c.Register("while_node", &compiler.WhileNodeCompiler{})
 
-			// 2. Compile
 			compiledAgent, err := c.Compile(g)
 			if err != nil {
 				return fmt.Errorf("compilation failed: %w", err)
 			}
 
-			// 3. Initialize Runtime
 			var rt runtime.AgentRuntime
 			if cfg.RuntimeType == "vertex" {
 				rt, err = runtime.NewVertexRuntime(ctx, cfg.ProjectID, cfg.Location)
@@ -68,14 +67,12 @@ func main() {
 				rt = runtime.NewLocalRuntime()
 			}
 
-			// 4. Execute
 			fmt.Printf("Running graph '%s'...\n", g.Name)
 			for event, err := range rt.Execute(ctx, compiledAgent, input) {
 				if err != nil {
 					return fmt.Errorf("execution error: %w", err)
 				}
 				if event != nil {
-					// Basic event printing for now
 					fmt.Printf("[%s] %v\n", event.Type, event.Content)
 				}
 			}
@@ -84,7 +81,22 @@ func main() {
 		},
 	}
 
+	var serveCmd = &cobra.Command{
+		Use:   "serve",
+		Short: "Start the Visual Agent API server",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, err := storage.New("data/graphs")
+			if err != nil {
+				return err
+			}
+			srv := server.New(s)
+			fmt.Println("Starting server on :8080...")
+			return srv.Run(":8080")
+		},
+	}
+
 	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(serveCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
