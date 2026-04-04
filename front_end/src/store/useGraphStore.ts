@@ -32,6 +32,7 @@ export interface GraphState {
 
   // Node Mutation
   updateNodeConfig: (nodeId: string, config: any) => void;
+  addNode: (type: string, position: { x: number, y: number }) => void;
 
   // Contract Serialization
   exportGraph: () => Graph;
@@ -86,6 +87,50 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       nodes: get().nodes.map((node) =>
         node.id === nodeId ? { ...node, data: { ...node.data, config } } : node
       ),
+    });
+  },
+
+  addNode: (type, position) => {
+    const id = `${type}-${Date.now()}`;
+    let config: any = {};
+
+    switch (type) {
+      case 'input_node':
+        config = { name: 'user_input', description: 'The user input' };
+        break;
+      case 'llm_node':
+        config = { 
+            name: 'llm_agent', 
+            description: 'The Agent', 
+            model: 'gemini-2.5-flash', 
+            instruction: 'You are a helpful assistant.',
+            response_mode: 'text',
+            generate_content_config: { temperature: 0.7, max_output_tokens: 4096 }
+        };
+        break;
+      case 'toolbox':
+        config = { tools: [], mcp_servers: [], custom_functions: [] };
+        break;
+      case 'output_node':
+        config = { name: 'final_output', output_key: 'result', format: 'message' };
+        break;
+      case 'if_else_node':
+        config = { condition_language: 'CEL', condition: 'state.category == "billing"' };
+        break;
+      case 'while_node':
+        config = { condition: 'state.counter < 5', max_iterations: 10 };
+        break;
+    }
+
+    const newNode: Node = {
+      id,
+      type,
+      position,
+      data: { config },
+    };
+
+    set({
+      nodes: [...get().nodes, newNode],
     });
   },
 

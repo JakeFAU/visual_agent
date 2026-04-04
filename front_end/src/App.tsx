@@ -1,8 +1,9 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import ReactFlow, { 
   Background, 
   Controls, 
-  Panel
+  Panel,
+  useReactFlow
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -15,7 +16,8 @@ import { IfElseNode } from './components/nodes/IfElseNode';
 import { WhileNode } from './components/nodes/WhileNode';
 import { SidePanel } from './components/SidePanel';
 import { LogPanel } from './components/LogPanel';
-import { saveGraph, executeGraph, loadGraphs } from './api/client';
+import { Palette } from './components/Palette';
+import { saveGraph, executeGraph } from './api/client';
 
 const App: React.FC = () => {
   const { 
@@ -25,10 +27,11 @@ const App: React.FC = () => {
     onEdgesChange, 
     onConnect,
     exportGraph,
-    importGraph,
+    addNode,
     name
   } = useGraphStore();
 
+  const { screenToFlowPosition } = useReactFlow();
   const [logs, setLogs] = useState<any[]>([]);
   const [isLogOpen, setIsLogOpen] = useState(false);
 
@@ -40,6 +43,28 @@ const App: React.FC = () => {
     if_else_node: IfElseNode,
     while_node: WhileNode,
   }), []);
+
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+
+      const type = event.dataTransfer.getData('application/reactflow');
+      if (typeof type === 'undefined' || !type) return;
+
+      const position = screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+
+      addNode(type, position);
+    },
+    [screenToFlowPosition, addNode]
+  );
 
   const handleSave = async () => {
     const graph = exportGraph();
@@ -96,13 +121,16 @@ const App: React.FC = () => {
       </header>
 
       <main className="flex-1 flex overflow-hidden relative">
-        <div className="flex-1 relative">
+        <Palette />
+        <div className="flex-1 relative h-full">
           <ReactFlow
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
             nodeTypes={nodeTypes}
             fitView
           >
