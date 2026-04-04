@@ -4,15 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+
 	"github.com/JakeFAU/visual_agent/internal/graph"
 	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/model"
 	"google.golang.org/adk/model/gemini"
 	"google.golang.org/adk/tool"
 	"google.golang.org/genai"
-	"os"
 )
 
-type LLMNodeCompiler struct{}
+// ModelFactory is a function that creates a new LLM model instance.
+type ModelFactory func(ctx context.Context, modelName string, cfg *genai.ClientConfig) (model.LLM, error)
+
+type LLMNodeCompiler struct {
+	// NewModel allows overriding the model creation for testing.
+	NewModel ModelFactory
+}
 
 func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
 	cfg, ok := node.Config.(graph.LLMNodeConfig)
@@ -35,7 +43,12 @@ func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface
 	}
 
 	ctx := context.Background()
-	model, err := gemini.NewModel(ctx, cfg.Model, clientCfg)
+	newModel := c.NewModel
+	if newModel == nil {
+		newModel = gemini.NewModel
+	}
+
+	modelInst, err := newModel(ctx, cfg.Model, clientCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create model: %w", err)
 	}
@@ -43,7 +56,7 @@ func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface
 	llmCfg := llmagent.Config{
 		Name:        cfg.Name,
 		Description: cfg.Description,
-		Model:       model,
+		Model:       modelInst,
 		Instruction: cfg.Instruction,
 	}
 

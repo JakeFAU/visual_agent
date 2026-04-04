@@ -106,7 +106,7 @@ func (s *Server) Execute(c *gin.Context) {
 	}
 
 	rt := runtime.NewLocalRuntime()
-	
+
 	fmt.Println("[DEBUG] Starting SSE stream")
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
