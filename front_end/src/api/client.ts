@@ -32,33 +32,36 @@ export const executeGraph = async (graph: any, input: string, onEvent: (ev: { ty
   const decoder = new TextDecoder();
   let buffer = '';
 
+  const processLines = (text: string) => {
+    const lines = text.split('\n');
+    for (const line of lines) {
+        if (line.startsWith('data: ')) {
+            try {
+                const jsonStr = line.substring(6).trim();
+                if (jsonStr) {
+                    const data = JSON.parse(jsonStr);
+                    onEvent(data);
+                }
+            } catch (e) {
+                console.warn("Failed to parse SSE JSON:", line, e);
+            }
+        }
+    }
+  };
+
   while (true) {
     const { value, done } = await reader.read();
-    if (done) break;
+    if (done) {
+        if (buffer) processLines(buffer);
+        break;
+    }
     
     buffer += decoder.decode(value, { stream: true });
-    
-    // SSE messages are separated by double newlines
     const parts = buffer.split('\n\n');
-    
-    // The last part might be incomplete, keep it in the buffer
     buffer = parts.pop() || '';
 
     for (const part of parts) {
-        const lines = part.split('\n');
-        for (const line of lines) {
-            if (line.startsWith('data: ')) {
-                try {
-                    const jsonStr = line.substring(6).trim();
-                    if (jsonStr) {
-                        const data = JSON.parse(jsonStr);
-                        onEvent(data);
-                    }
-                } catch (e) {
-                    console.warn("Failed to parse SSE JSON:", line, e);
-                }
-            }
-        }
+        processLines(part);
     }
   }
 };

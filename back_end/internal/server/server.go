@@ -106,7 +106,7 @@ func (s *Server) Execute(c *gin.Context) {
 	}
 
 	rt := runtime.NewLocalRuntime()
-
+	
 	fmt.Println("[DEBUG] Starting SSE stream")
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -120,21 +120,24 @@ func (s *Server) Execute(c *gin.Context) {
 				fmt.Printf("[DEBUG] Execution error: %v\n", err)
 				data, _ := json.Marshal(gin.H{"type": "error", "content": err.Error()})
 				c.SSEvent("message", string(data))
+				c.Writer.Flush()
 				return false
 			}
 			if event != nil {
-				fmt.Printf("[DEBUG] Received ADK event from author: %s\n", event.Author)
+				fmt.Printf("[DEBUG] Sending event from author: %s\n", event.Author)
 				data, _ := json.Marshal(gin.H{
 					"type":    "agent_event",
 					"content": event,
 					"author":  event.Author,
 				})
 				c.SSEvent("message", string(data))
+				c.Writer.Flush()
 			}
 		}
-		fmt.Println("[DEBUG] Execution loop finished")
+		fmt.Println("[DEBUG] Execution loop finished, sending done")
 		data, _ := json.Marshal(gin.H{"type": "done", "content": "execution complete"})
 		c.SSEvent("message", string(data))
+		c.Writer.Flush()
 		return false
 	})
 }
