@@ -14,12 +14,17 @@ export const loadGraphs = async () => {
   return resp.json();
 };
 
-export const executeGraph = async (graph: any, input: string, onEvent: (ev: any) => void) => {
+export const executeGraph = async (graph: any, input: string, onEvent: (ev: { type: string, content: any, author?: string }) => void) => {
   const response = await fetch(`${API_BASE}/execute`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ graph, input }),
   });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to start execution');
+  }
 
   const reader = response.body?.getReader();
   if (!reader) return;
@@ -32,22 +37,26 @@ export const executeGraph = async (graph: any, input: string, onEvent: (ev: any)
     if (done) break;
     
     buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
     
-    // Keep the last partial line in the buffer
-    buffer = lines.pop() || '';
+    // SSE messages are separated by double newlines
+    const parts = buffer.split('\n\n');
+    
+    // The last part might be incomplete, keep it in the buffer
+    buffer = parts.pop() || '';
 
-    for (const line of lines) {
-        if (line.trim() === '') continue;
-        if (line.startsWith('data: ')) {
-            try {
-                const jsonStr = line.substring(6).trim();
-                if (jsonStr) {
-                    const data = JSON.parse(jsonStr);
-                    onEvent(data);
+    for (const part of parts) {
+        const lines = part.split('\n');
+        for (const line of lines) {
+            if (line.startsWith('data: ')) {
+                try {
+                    const jsonStr = line.substring(6).trim();
+                    if (jsonStr) {
+                        const data = JSON.parse(jsonStr);
+                        onEvent(data);
+                    }
+                } catch (e) {
+                    console.warn("Failed to parse SSE JSON:", line, e);
                 }
-            } catch (e) {
-                console.warn("Failed to parse SSE line:", line, e);
             }
         }
     }

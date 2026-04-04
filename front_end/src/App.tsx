@@ -87,7 +87,9 @@ const App: React.FC = () => {
     const graph = exportGraph();
     try {
         await executeGraph(graph, userInput, (event) => {
-            addLog(event.author || 'message', event.content || event);
+            const logType = event.type === 'agent_event' ? (event.author || 'agent') : event.type;
+            const logContent = event.type === 'agent_event' ? event.content : (event.content || event);
+            addLog(logType, logContent);
         });
     } catch (e) {
         addLog('error', `Execution failed: ${e}`);
