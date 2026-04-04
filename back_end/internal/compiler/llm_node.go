@@ -1,34 +1,56 @@
 package compiler
 
 import (
+	"context"
 	"fmt"
 	"github.com/JakeFAU/visual_agent/internal/graph"
+	"google.golang.org/adk/agent"
 	"google.golang.org/adk/agent/llmagent"
 	"google.golang.org/adk/model/gemini"
+    "google.golang.org/genai"
+    "encoding/json"
 )
 
 type LLMNodeCompiler struct{}
 
-func (c *LLMNodeCompiler) Compile(node graph.Node) (interface{}, error) {
+func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface{}) (agent.Agent, error) {
 	cfg, ok := node.Config.(graph.LLMNodeConfig)
 	if !ok {
 		return nil, fmt.Errorf("invalid config for llm_node")
 	}
 
-	// In a real implementation, the model would be configured based on cfg.Model
-	// and GenerationConfig. For now, we'll use a default Gemini setup.
-	model := gemini.New(cfg.Model)
+	ctx := context.Background()
+	model, err := gemini.NewModel(ctx, cfg.Model, &genai.ClientConfig{APIKey: "dummy"})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create model: %w", err)
+	}
 	
-	options := []llmagent.Option{
-		llmagent.WithInstructions(cfg.Instruction),
+	llmCfg := llmagent.Config{
+		Name:        cfg.Name,
+		Description: cfg.Description,
+		Model:       model,
+		Instruction: cfg.Instruction,
 	}
 
-	if cfg.ResponseMode == "json" {
-		// ADK supports output schemas
-		options = append(options, llmagent.WithOutputSchema(cfg.OutputSchema))
+	if cfg.ResponseMode == "json" && cfg.OutputSchema != nil {
+        // Convert map[string]interface{} to *genai.Schema
+        schemaBytes, _ := json.Marshal(cfg.OutputSchema)
+        var schema genai.Schema
+        if err := json.Unmarshal(schemaBytes, &schema); err != nil {
+            return nil, fmt.Errorf("failed to parse output schema: %w", err)
+        }
+		llmCfg.OutputSchema = &schema
 	}
 
-	agent := llmagent.New(cfg.Name, cfg.Description, model, options...)
+	// Apply output keys from walker if present
+	if keys, ok := metadata["output_keys"].([]string); ok && len(keys) > 0 {
+		llmCfg.OutputKey = keys[0]
+	}
+
+	agentInstance, err := llmagent.New(llmCfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create llmagent: %w", err)
+	}
 	
-	return agent, nil
+	return agentInstance, nil
 }
