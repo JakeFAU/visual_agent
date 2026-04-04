@@ -15,6 +15,7 @@ export const loadGraphs = async () => {
 };
 
 export const executeGraph = async (graph: any, input: string, onEvent: (ev: { type: string, content: any, author?: string }) => void) => {
+  console.log("[DEBUG] Starting executeGraph fetch...");
   const response = await fetch(`${API_BASE}/execute`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -27,24 +28,25 @@ export const executeGraph = async (graph: any, input: string, onEvent: (ev: { ty
   }
 
   const reader = response.body?.getReader();
-  if (!reader) return;
+  if (!reader) {
+    console.error("[DEBUG] No response body reader available");
+    return;
+  }
 
   const decoder = new TextDecoder();
   let buffer = '';
 
-  const processLines = (text: string) => {
-    const lines = text.split('\n');
-    for (const line of lines) {
-        if (line.startsWith('data: ')) {
-            try {
-                const jsonStr = line.substring(6).trim();
-                if (jsonStr) {
-                    const data = JSON.parse(jsonStr);
-                    onEvent(data);
-                }
-            } catch (e) {
-                console.warn("Failed to parse SSE JSON:", line, e);
+  const processLine = (line: string) => {
+    console.log("[DEBUG] SSE Raw Line:", line);
+    if (line.startsWith('data: ')) {
+        try {
+            const jsonStr = line.substring(6).trim();
+            if (jsonStr) {
+                const data = JSON.parse(jsonStr);
+                onEvent(data);
             }
+        } catch (e) {
+            console.warn("[DEBUG] Failed to parse SSE JSON:", line, e);
         }
     }
   };
@@ -52,16 +54,21 @@ export const executeGraph = async (graph: any, input: string, onEvent: (ev: { ty
   while (true) {
     const { value, done } = await reader.read();
     if (done) {
-        if (buffer) processLines(buffer);
+        console.log("[DEBUG] Stream reader done. Remaining buffer:", buffer);
+        if (buffer) {
+            buffer.split('\n').forEach(processLine);
+        }
         break;
     }
     
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split('\n\n');
-    buffer = parts.pop() || '';
+    const chunk = decoder.decode(value, { stream: true });
+    console.log("[DEBUG] Received chunk length:", chunk.length);
+    buffer += chunk;
+    
+    const lines = buffer.split('\n');
+    // Keep the last partial line
+    buffer = lines.pop() || '';
 
-    for (const part of parts) {
-        processLines(part);
-    }
+    lines.forEach(processLine);
   }
 };
