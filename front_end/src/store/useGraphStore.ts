@@ -27,17 +27,16 @@ export interface GraphState {
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
 
-  // Selection
+  // Actions
   setSelectedNodeId: (nodeId: string | null) => void;
-
-  // Node Mutation
   updateNodeConfig: (nodeId: string, config: any) => void;
   addNode: (type: string, position: { x: number, y: number }) => void;
+  clearGraph: () => void;
 
   // Contract Serialization
   exportGraph: () => Graph;
-  importGraph: (json: string) => void;
-  validateGraph: () => void;
+  importGraph: (data: any) => void;
+  validateGraph: () => boolean;
 }
 
 export const useGraphStore = create<GraphState>((set, get) => ({
@@ -70,9 +69,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   onConnect: (connection: Connection) => {
-    // Validate types before connecting
-    if (connection.sourceHandle !== connection.targetHandle) {
-        console.warn("Invalid connection: types must match", connection.sourceHandle, connection.targetHandle);
+    // Validate types before connecting (split by : to handle true/false branches)
+    const sourceType = connection.sourceHandle?.split(':')[0];
+    const targetType = connection.targetHandle?.split(':')[0];
+
+    if (sourceType !== targetType) {
+        console.warn("Invalid connection: types must match", sourceType, targetType);
         return;
     }
     set({
@@ -134,12 +136,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     });
   },
 
+  clearGraph: () => set({ nodes: [], edges: [], name: 'New Workflow', validationErrors: [] }),
+
   exportGraph: () => {
     const { nodes, edges, version, name } = get();
     
     const contractNodes: ContractNode[] = nodes.map(node => ({
       id: node.id,
-      type: node.type as any, // Validated by Zod later
+      type: node.type as any,
       position: node.position,
       config: node.data.config,
     }));
@@ -150,7 +154,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       source_port: edge.sourceHandle || "",
       target: edge.target,
       target_port: edge.targetHandle || "",
-      data_type: edge.sourceHandle || "", // Assuming handle ID matches data_type
+      data_type: (edge.sourceHandle || "").split(':')[0],
       edge_kind: "data_flow",
     }));
 
@@ -162,9 +166,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     };
   },
 
-  importGraph: (json: string) => {
+  importGraph: (data: any) => {
     try {
-      const data = JSON.parse(json);
       const validated = GraphSchema.parse(data);
       
       const rfNodes: Node[] = validated.nodes.map(node => ({
@@ -203,8 +206,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (!result.success) {
       const errorStrings = result.error?.errors.map(e => `${e.path.join('.')}: ${e.message}`) || ["Unknown validation error"];
       set({ validationErrors: errorStrings });
+      return false;
     } else {
       set({ validationErrors: [] });
+      return true;
     }
   },
 }));

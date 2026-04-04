@@ -33,14 +33,14 @@ export const IfElseNode = memo(({ data, selected }: NodeProps<{ config: IfElseNo
       <Handle
         type="source"
         position={Position.Right}
-        id="message"
+        id="message:true"
         className="w-2 h-2 !bg-green-500 border-2 border-gray-800"
         style={{ right: -4, top: '78px' }}
       />
       <Handle
         type="source"
         position={Position.Right}
-        id="message"
+        id="message:false"
         className="w-2 h-2 !bg-red-500 border-2 border-gray-800"
         style={{ right: -4, top: '98px' }}
       />

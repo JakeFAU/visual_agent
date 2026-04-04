@@ -18,7 +18,7 @@ import { WhileNode } from './components/nodes/WhileNode';
 import { SidePanel } from './components/SidePanel';
 import { LogPanel } from './components/LogPanel';
 import { Palette } from './components/Palette';
-import { saveGraph, executeGraph } from './api/client';
+import { saveGraph, executeGraph, loadGraphs, API_BASE } from './api/client';
 
 const App: React.FC = () => {
   const { 
@@ -28,6 +28,8 @@ const App: React.FC = () => {
     onEdgesChange, 
     onConnect,
     exportGraph,
+    importGraph,
+    validateGraph,
     addNode,
     name
   } = useGraphStore();
@@ -77,6 +79,36 @@ const App: React.FC = () => {
     }
   };
 
+  const handleLoad = async () => {
+    try {
+        const names = await loadGraphs();
+        if (!names || names.length === 0) {
+            alert("No saved graphs found.");
+            return;
+        }
+        const selected = window.prompt(`Enter graph name to load:\nAvailable: ${names.join(', ')}`);
+        if (selected) {
+            const resp = await fetch(`${API_BASE}/graphs/${selected}`);
+            const data = await resp.json();
+            importGraph(data);
+            addLog('info', `Graph '${selected}' loaded.`);
+        }
+    } catch (e) {
+        addLog('error', `Failed to load graphs: ${e}`);
+    }
+  };
+
+  const handleValidate = () => {
+    const isValid = validateGraph();
+    setIsLogOpen(true);
+    if (isValid) {
+        addLog('info', 'Graph contract validation: SUCCESS');
+    } else {
+        const errors = useGraphStore.getState().validationErrors;
+        errors.forEach(err => addLog('error', `Validation Error: ${err}`));
+    }
+  };
+
   const handleDeploy = async () => {
     const userInput = window.prompt("Enter agent input:", "Hello, who are you?");
     if (userInput === null) return;
@@ -109,7 +141,19 @@ const App: React.FC = () => {
         </div>
         <div className="flex gap-3">
           <button 
-            className="px-4 py-1.5 rounded bg-gray-800 border border-gray-700 text-[11px] font-bold uppercase tracking-widest text-gray-400 hover:bg-gray-700 transition-all active:scale-95"
+            className="px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:bg-gray-700 transition-all active:scale-95"
+            onClick={handleLoad}
+          >
+            Load
+          </button>
+          <button 
+            className="px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:bg-gray-700 transition-all active:scale-95"
+            onClick={handleValidate}
+          >
+            Validate
+          </button>
+          <button 
+            className="px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:bg-gray-700 transition-all active:scale-95"
             onClick={handleSave}
           >
             Save
