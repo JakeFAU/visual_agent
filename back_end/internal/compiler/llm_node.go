@@ -21,12 +21,21 @@ func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface
 	}
 
 	apiKey := os.Getenv("GOOGLE_API_KEY")
-	if apiKey == "" {
-		apiKey = "dummy"
+	clientCfg := &genai.ClientConfig{}
+	if apiKey != "" {
+		clientCfg.APIKey = apiKey
+	} else {
+		// Use Vertex AI with ADC
+		clientCfg.Backend = genai.BackendVertexAI
+		clientCfg.Project = os.Getenv("GOOGLE_CLOUD_PROJECT")
+		clientCfg.Location = os.Getenv("GOOGLE_CLOUD_LOCATION")
+		if clientCfg.Location == "" {
+			clientCfg.Location = "us-central1"
+		}
 	}
 
 	ctx := context.Background()
-	model, err := gemini.NewModel(ctx, cfg.Model, &genai.ClientConfig{APIKey: apiKey})
+	model, err := gemini.NewModel(ctx, cfg.Model, clientCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create model: %w", err)
 	}
