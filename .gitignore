@@ -7,11 +7,22 @@
 .env.local
 .env.*.local
 
+# Security & Credentials
+.google-cloud/
+adc.json
+credentials.json
+keyfile.json
+*.pem
+*.key
+
 # Front-end (React/Vite/Node)
 front_end/node_modules/
 front_end/dist/
 front_end/build/
 front_end/.vite/
+front_end/npm-debug.log*
+front_end/yarn-debug.log*
+front_end/yarn-error.log*
 
 # Back-end (Go)
 back_end/bin/
@@ -24,6 +35,8 @@ back_end/vendor/
 *.dylib
 back_end/*.test
 back_end/*.out
+back_end/visual-agent
+back_end/data/graphs/*.json
 
 # IDEs
 .vscode/
