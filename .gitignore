@@ -48,4 +48,5 @@ back_end/data/graphs/*.json
 tmp/
 .gemini/tmp/
 docs/
-GEMINI.md  
+GEMINI.md
+image.png
