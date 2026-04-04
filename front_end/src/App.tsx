@@ -86,7 +86,7 @@ const App: React.FC = () => {
     const graph = exportGraph();
     try {
         await executeGraph(graph, userInput, (event) => {
-            addLog(event.type || 'message', event.content || event);
+            addLog(event.author || 'message', event.content || event);
         });
     } catch (e) {
         addLog('error', `Execution failed: ${e}`);

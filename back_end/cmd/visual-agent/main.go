@@ -73,7 +73,7 @@ func main() {
 					return fmt.Errorf("execution error: %w", err)
 				}
 				if event != nil {
-					fmt.Printf("[%s] %v\n", event.Type, event.Content)
+					fmt.Printf("[%s] %v\n", event.Author, event.Content)
 				}
 			}
 

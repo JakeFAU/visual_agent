@@ -26,13 +26,13 @@ func TestLocalRuntime(t *testing.T) {
 
 	// Execute
 	seq := rt.Execute(ctx, a, "Hi")
-	
+
 	// We just want to ensure it doesn't crash and returns an iterator
 	if seq == nil {
 		t.Fatal("Expected iterator, got nil")
 	}
-	
-	// Note: Without a real backend or mock model, running the iterator 
-	// would likely fail during the actual model call, but the 
+
+	// Note: Without a real backend or mock model, running the iterator
+	// would likely fail during the actual model call, but the
 	// initialization and abstraction are now verified.
 }

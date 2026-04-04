@@ -2,13 +2,13 @@ package compiler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/JakeFAU/visual_agent/internal/graph"
 	"google.golang.org/adk/agent/llmagent"
 	"google.golang.org/adk/model/gemini"
-    "google.golang.org/genai"
-    "google.golang.org/adk/tool"
-    "encoding/json"
+	"google.golang.org/adk/tool"
+	"google.golang.org/genai"
 )
 
 type LLMNodeCompiler struct{}
@@ -24,7 +24,7 @@ func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface
 	if err != nil {
 		return nil, fmt.Errorf("failed to create model: %w", err)
 	}
-	
+
 	llmCfg := llmagent.Config{
 		Name:        cfg.Name,
 		Description: cfg.Description,
@@ -33,11 +33,11 @@ func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface
 	}
 
 	if cfg.ResponseMode == "json" && cfg.OutputSchema != nil {
-        schemaBytes, _ := json.Marshal(cfg.OutputSchema)
-        var schema genai.Schema
-        if err := json.Unmarshal(schemaBytes, &schema); err != nil {
-            return nil, fmt.Errorf("failed to parse output schema: %w", err)
-        }
+		schemaBytes, _ := json.Marshal(cfg.OutputSchema)
+		var schema genai.Schema
+		if err := json.Unmarshal(schemaBytes, &schema); err != nil {
+			return nil, fmt.Errorf("failed to parse output schema: %w", err)
+		}
 		llmCfg.OutputSchema = &schema
 	}
 
@@ -46,15 +46,15 @@ func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface
 		llmCfg.OutputKey = keys[0]
 	}
 
-    // Apply toolsets if present
-    if toolsets, ok := metadata["toolsets"].([]tool.Toolset); ok {
-        llmCfg.Toolsets = toolsets
-    }
+	// Apply toolsets if present
+	if toolsets, ok := metadata["toolsets"].([]tool.Toolset); ok {
+		llmCfg.Toolsets = toolsets
+	}
 
 	agentInstance, err := llmagent.New(llmCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create llmagent: %w", err)
 	}
-	
+
 	return agentInstance, nil
 }

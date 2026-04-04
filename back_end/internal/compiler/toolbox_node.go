@@ -2,11 +2,11 @@ package compiler
 
 import (
 	"fmt"
-	"os/exec"
 	"github.com/JakeFAU/visual_agent/internal/graph"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/mcptoolset"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"os/exec"
 )
 
 type ToolboxNodeCompiler struct{}
