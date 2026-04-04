@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import ReactFlow, { 
   Background, 
   Controls, 
@@ -19,6 +19,7 @@ import { SidePanel } from './components/SidePanel';
 import { LogPanel } from './components/LogPanel';
 import { Palette } from './components/Palette';
 import { saveGraph, executeGraph, loadGraphs, API_BASE } from './api/client';
+import { extractDisplayContent, extractFinalResponse, isFinalAgentResponse } from './utils/execution';
 
 const nodeTypes = {
   input_node: InputNode,
@@ -46,6 +47,7 @@ const App: React.FC = () => {
   const { screenToFlowPosition } = useReactFlow();
   const [logs, setLogs] = useState<any[]>([]);
   const [isLogOpen, setIsLogOpen] = useState(false);
+  const [finalResponse, setFinalResponse] = useState<string | null>(null);
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -113,37 +115,29 @@ const App: React.FC = () => {
     const userInput = window.prompt("Enter agent input:", "Hello, who are you?");
     if (userInput === null) return;
 
+    setFinalResponse(null);
     setIsLogOpen(true);
     addLog('info', 'Starting execution...');
     
     const graph = exportGraph();
+    const outputKeys = graph.nodes
+      .filter((node: any) => node.type === 'output_node')
+      .map((node: any) => node.config.output_key)
+      .filter(Boolean);
+
     try {
         await executeGraph(graph, userInput, (event) => {
             console.log("[DEBUG] IDE Received Event:", JSON.stringify(event, null, 2));
             
             const logType = event.type === 'agent_event' ? (event.author || 'agent') : event.type;
-            
-            let logContent = event.content;
-            
-            // ADK events embed model.LLMResponse
-            const content = event.content?.Content || event.content?.content;
-            const parts = content?.Parts || content?.parts;
-
-            if (Array.isArray(parts)) {
-                const text = parts.map((p: any) => p.Text || p.text || "").join('');
-                if (text) {
-                    logContent = text;
-                } else if (parts.length > 0) {
-                    logContent = JSON.stringify(parts);
-                }
-            } else if (event.type === 'agent_event' && event.content?.Actions?.StateDelta?.message) {
-                // Check state delta as fallback
-                logContent = event.content.Actions.StateDelta.message;
-            } else if (event.type === 'agent_event' && event.content?.actions?.stateDelta?.message) {
-                logContent = event.content.actions.stateDelta.message;
-            }
+            const responseText = extractFinalResponse(event, outputKeys);
+            const logContent = responseText ?? extractDisplayContent(event, outputKeys) ?? event.content;
 
             addLog(logType, logContent);
+
+            if (isFinalAgentResponse(event) && responseText) {
+                setFinalResponse(responseText);
+            }
         });
     } catch (e) {
         addLog('error', `Execution failed: ${e}`);
@@ -216,9 +210,13 @@ const App: React.FC = () => {
           
           <LogPanel 
             logs={logs} 
+            response={finalResponse}
             isOpen={isLogOpen} 
             onToggle={() => setIsLogOpen(!isLogOpen)} 
-            onClear={() => setLogs([])}
+            onClear={() => {
+              setLogs([]);
+              setFinalResponse(null);
+            }}
           />
         </div>
         <SidePanel />

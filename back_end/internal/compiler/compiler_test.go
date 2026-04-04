@@ -3,9 +3,11 @@ package compiler
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/JakeFAU/visual_agent/internal/graph"
+	"google.golang.org/adk/agent"
 	"google.golang.org/adk/model"
 	"google.golang.org/genai"
 	"iter"
@@ -24,6 +26,15 @@ func (m *MockModel) GenerateContent(_ context.Context, _ *model.LLMRequest, _ bo
 
 func MockModelFactory(_ context.Context, _ string, _ *genai.ClientConfig) (model.LLM, error) {
 	return &MockModel{}, nil
+}
+
+type CaptureCompiler struct {
+	lastMetadata map[string]interface{}
+}
+
+func (c *CaptureCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
+	c.lastMetadata = metadata
+	return agent.New(agent.Config{Name: node.ID})
 }
 
 func TestCompileSequential(t *testing.T) {
@@ -154,5 +165,76 @@ func TestCompileCycle(t *testing.T) {
 	_, err := c.Compile(g)
 	if err == nil {
 		t.Fatal("Expected error for cyclic graph, got nil")
+	}
+}
+
+func TestCompileUsesOutputNodeKey(t *testing.T) {
+	graphJSON := `{
+  "version": "1.0",
+  "name": "output_key_workflow",
+  "nodes": [
+    {
+      "id": "llm-1",
+      "type": "llm_node",
+      "position": { "x": 0, "y": 0 },
+      "config": {
+        "name": "agent_1",
+        "description": "Agent",
+        "model": "gemini-2.0-flash",
+        "instruction": "Hello",
+        "response_mode": "text",
+        "generate_content_config": {}
+      }
+    },
+    {
+      "id": "output-1",
+      "type": "output_node",
+      "position": { "x": 300, "y": 0 },
+      "config": {
+        "name": "final_output",
+        "output_key": "result",
+        "format": "message"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "llm-1",
+      "source_port": "message",
+      "target": "output-1",
+      "target_port": "message",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    }
+  ]
+}`
+
+	var g graph.Graph
+	if err := json.Unmarshal([]byte(graphJSON), &g); err != nil {
+		t.Fatalf("Failed to unmarshal graph: %v", err)
+	}
+
+	c := New()
+	capture := &CaptureCompiler{}
+	c.Register("llm_node", capture)
+
+	compiled, err := c.Compile(g)
+	if err != nil {
+		t.Fatalf("Compilation failed: %v", err)
+	}
+
+	if compiled == nil {
+		t.Fatal("Expected compiled agent, got nil")
+	}
+
+	got, ok := capture.lastMetadata["output_keys"].([]string)
+	if !ok {
+		t.Fatalf("Expected output_keys metadata, got %#v", capture.lastMetadata["output_keys"])
+	}
+
+	want := []string{"result"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("output_keys mismatch: got %v want %v", got, want)
 	}
 }
