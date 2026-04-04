@@ -15,8 +15,8 @@ import (
 )
 
 type Server struct {
-	router  *gin.Engine
-	storage *storage.Storage
+	router   *gin.Engine
+	storage  *storage.Storage
 	compiler *compiler.Compiler
 }
 
@@ -31,8 +31,8 @@ func New(s *storage.Storage) *Server {
 	c.Register("while_node", &compiler.WhileNodeCompiler{})
 
 	srv := &Server{
-		router:  r,
-		storage: s,
+		router:   r,
+		storage:  s,
 		compiler: c,
 	}
 
@@ -102,7 +102,7 @@ func (s *Server) Execute(c *gin.Context) {
 	}
 
 	rt := runtime.NewLocalRuntime()
-	
+
 	c.Stream(func(_ io.Writer) bool {
 		for event, err := range rt.Execute(c.Request.Context(), compiled, req.Input) {
 			if err != nil {
@@ -113,9 +113,9 @@ func (s *Server) Execute(c *gin.Context) {
 			if event != nil {
 				// Wrap the ADK event in our standard response type
 				data, _ := json.Marshal(gin.H{
-					"type": "agent_event", 
+					"type":    "agent_event",
 					"content": event,
-					"author": event.Author,
+					"author":  event.Author,
 				})
 				c.SSEvent("message", string(data))
 			}
