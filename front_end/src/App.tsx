@@ -119,8 +119,19 @@ const App: React.FC = () => {
     const graph = exportGraph();
     try {
         await executeGraph(graph, userInput, (event) => {
+            console.log("[DEBUG] IDE Received Event:", event);
             const logType = event.type === 'agent_event' ? (event.author || 'agent') : event.type;
-            const logContent = event.type === 'agent_event' ? event.content : (event.content || event);
+            
+            let logContent = event.content;
+            if (event.type === 'agent_event' && event.content?.Content?.Parts) {
+                const text = event.content.Content.Parts.map((p: any) => p.Text).join('');
+                if (text) logContent = text;
+            } else if (event.type === 'agent_event' && event.content?.content?.parts) {
+                // Handle different casing from backend if necessary
+                const text = event.content.content.parts.map((p: any) => p.text).join('');
+                if (text) logContent = text;
+            }
+
             addLog(logType, logContent);
         });
     } catch (e) {

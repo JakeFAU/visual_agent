@@ -1,11 +1,30 @@
 package compiler
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
 	"github.com/JakeFAU/visual_agent/internal/graph"
+	"google.golang.org/adk/model"
+	"google.golang.org/genai"
+	"iter"
 )
+
+// MockModel satisfies the model.LLM interface for testing.
+type MockModel struct{}
+
+func (m *MockModel) Name() string { return "mock-model" }
+
+func (m *MockModel) GenerateContent(_ context.Context, _ *model.LLMRequest, _ bool) iter.Seq2[*model.LLMResponse, error] {
+	return func(yield func(*model.LLMResponse, error) bool) {
+		yield(&model.LLMResponse{}, nil)
+	}
+}
+
+func MockModelFactory(_ context.Context, _ string, _ *genai.ClientConfig) (model.LLM, error) {
+	return &MockModel{}, nil
+}
 
 func TestCompileSequential(t *testing.T) {
 	graphJSON := `{
@@ -54,7 +73,7 @@ func TestCompileSequential(t *testing.T) {
 	}
 
 	c := New()
-	c.Register("llm_node", &LLMNodeCompiler{})
+	c.Register("llm_node", &LLMNodeCompiler{NewModel: MockModelFactory})
 
 	compiled, err := c.Compile(g)
 	if err != nil {
@@ -64,8 +83,6 @@ func TestCompileSequential(t *testing.T) {
 	if compiled == nil {
 		t.Fatal("Expected compiled agent, got nil")
 	}
-
-	t.Logf("Compiled agent type: %T", compiled)
 }
 
 func TestCompileIfElse(t *testing.T) {
@@ -104,7 +121,7 @@ func TestCompileIfElse(t *testing.T) {
 	}
 
 	c := New()
-	c.Register("llm_node", &LLMNodeCompiler{})
+	c.Register("llm_node", &LLMNodeCompiler{NewModel: MockModelFactory})
 	c.Register("if_else_node", &IfElseNodeCompiler{})
 
 	compiled, err := c.Compile(g)
@@ -132,11 +149,10 @@ func TestCompileCycle(t *testing.T) {
 	_ = json.Unmarshal([]byte(cycleJSON), &g)
 
 	c := New()
-	c.Register("llm_node", &LLMNodeCompiler{})
+	c.Register("llm_node", &LLMNodeCompiler{NewModel: MockModelFactory})
 
 	_, err := c.Compile(g)
 	if err == nil {
 		t.Fatal("Expected error for cyclic graph, got nil")
 	}
-	t.Logf("Caught expected error: %v", err)
 }
