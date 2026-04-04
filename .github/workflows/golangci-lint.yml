@@ -16,11 +16,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: "1.25"
           cache: true
           cache-dependency-path: back_end/go.sum
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v2.11.4
           working-directory: back_end
