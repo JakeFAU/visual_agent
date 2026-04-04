@@ -103,7 +103,7 @@ func (s *Server) Execute(c *gin.Context) {
 
 	rt := runtime.NewLocalRuntime()
 
-	c.Stream(func(w io.Writer) bool {
+	c.Stream(func(_ io.Writer) bool {
 		for event, err := range rt.Execute(c.Request.Context(), compiled, req.Input) {
 			if err != nil {
 				c.SSEvent("error", err.Error())

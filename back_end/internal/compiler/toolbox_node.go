@@ -11,7 +11,7 @@ import (
 
 type ToolboxNodeCompiler struct{}
 
-func (c *ToolboxNodeCompiler) Compile(node graph.Node, metadata map[string]interface{}) (interface{}, error) {
+func (c *ToolboxNodeCompiler) Compile(node graph.Node, _ map[string]interface{}) (interface{}, error) {
 	cfg, ok := node.Config.(graph.ToolboxNodeConfig)
 	if !ok {
 		return nil, fmt.Errorf("invalid config for toolbox")
