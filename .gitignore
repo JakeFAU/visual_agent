@@ -1,0 +1,36 @@
+# Monorepo .gitignore for Visual Agent
+
+# General
+.DS_Store
+*.log
+.env
+.env.local
+.env.*.local
+
+# Front-end (React/Vite/Node)
+front_end/node_modules/
+front_end/dist/
+front_end/build/
+front_end/.vite/
+
+# Back-end (Go)
+back_end/bin/
+back_end/dist/
+back_end/vendor/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+back_end/*.test
+back_end/*.out
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary Files
+tmp/
+.gemini/tmp/
