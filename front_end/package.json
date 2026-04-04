@@ -1,0 +1,19 @@
+{
+  "name": "front_end",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "reactflow": "^11.11.4",
+    "tsx": "^4.21.0",
+    "zod": "^3.25.76",
+    "zustand": "^5.0.12"
+  }
+}
