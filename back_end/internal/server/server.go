@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/JakeFAU/visual_agent/internal/compiler"
 	"github.com/JakeFAU/visual_agent/internal/graph"
@@ -107,7 +106,7 @@ func (s *Server) Execute(c *gin.Context) {
 	}
 
 	rt := runtime.NewLocalRuntime()
-	
+
 	fmt.Println("[DEBUG] Starting SSE stream")
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
