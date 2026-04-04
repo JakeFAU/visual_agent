@@ -17,7 +17,6 @@ import { IfElseNode } from './components/nodes/IfElseNode';
 import { WhileNode } from './components/nodes/WhileNode';
 import { SidePanel } from './components/SidePanel';
 import { LogPanel } from './components/LogPanel';
-import { Palette } from './components/Palette';
 import { saveGraph, executeGraph, loadGraphs, API_BASE } from './api/client';
 
 const App: React.FC = () => {
@@ -119,17 +118,27 @@ const App: React.FC = () => {
     const graph = exportGraph();
     try {
         await executeGraph(graph, userInput, (event) => {
-            console.log("[DEBUG] IDE Received Event:", event);
+            console.log("[DEBUG] IDE Received Event:", JSON.stringify(event, null, 2));
+            
             const logType = event.type === 'agent_event' ? (event.author || 'agent') : event.type;
             
             let logContent = event.content;
-            if (event.type === 'agent_event' && event.content?.Content?.Parts) {
-                const text = event.content.Content.Parts.map((p: any) => p.Text).join('');
-                if (text) logContent = text;
-            } else if (event.type === 'agent_event' && event.content?.content?.parts) {
-                // Handle different casing from backend if necessary
-                const text = event.content.content.parts.map((p: any) => p.text).join('');
-                if (text) logContent = text;
+            
+            // ADK events embed model.LLMResponse, which contains genai.Content
+            // We need to handle both uppercase (Go default) and lowercase (JSON tags)
+            const content = event.content?.Content || event.content?.content;
+            const parts = content?.Parts || content?.parts;
+
+            if (Array.isArray(parts)) {
+                const text = parts.map((p: any) => p.Text || p.text || "").join('');
+                if (text) {
+                    logContent = text;
+                } else {
+                    // It might be a tool call or other structured part
+                    logContent = JSON.stringify(parts);
+                }
+            } else if (event.type === 'agent_event' && !logContent) {
+                logContent = "Agent message received (no text content)";
             }
 
             addLog(logType, logContent);
