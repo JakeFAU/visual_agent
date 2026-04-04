@@ -1,0 +1,9 @@
+# Code Owners for Visual Agent
+# This file defines who is responsible for specific parts of the codebase.
+
+# Global owners (responsible for the entire repo)
+*       @JakeFAU
+
+# You can also add more granular ownership in the future:
+# front_end/   @JakeFAU @someone_else
+# back_end/    @JakeFAU @someone_else
