@@ -36,14 +36,14 @@ export const WhileNode = memo(({ data, selected }: NodeProps<{ config: WhileNode
       <Handle
         type="source"
         position={Position.Right}
-        id="logic"
+        id="logic:loop"
         className="w-2 h-2 !bg-blue-400 border-2 border-gray-800"
         style={{ right: -4, top: '88px' }}
       />
       <Handle
         type="source"
         position={Position.Right}
-        id="logic"
+        id="logic:done"
         className="w-2 h-2 !bg-gray-400 border-2 border-gray-800"
         style={{ right: -4, top: '108px' }}
       />
