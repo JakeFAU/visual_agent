@@ -30,6 +30,9 @@ export interface GraphState {
   // Selection
   setSelectedNodeId: (nodeId: string | null) => void;
 
+  // Node Mutation
+  updateNodeConfig: (nodeId: string, config: any) => void;
+
   // Contract Serialization
   exportGraph: () => Graph;
   importGraph: (json: string) => void;
@@ -77,6 +80,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   setSelectedNodeId: (nodeId) => set({ selectedNodeId: nodeId }),
+
+  updateNodeConfig: (nodeId, config) => {
+    set({
+      nodes: get().nodes.map((node) =>
+        node.id === nodeId ? { ...node, data: { ...node.data, config } } : node
+      ),
+    });
+  },
 
   exportGraph: () => {
     const { nodes, edges, version, name } = get();

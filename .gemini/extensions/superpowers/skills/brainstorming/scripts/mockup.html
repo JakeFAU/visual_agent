@@ -2,84 +2,108 @@
 <html>
 <head>
     <style>
-        body { font-family: sans-serif; background: #1e1e1e; color: #fff; padding: 20px; }
-        .canvas { border: 2px solid #333; height: 600px; position: relative; background: #121212; overflow: hidden; border-radius: 8px; }
-        .node { 
-            position: absolute; border-radius: 8px; border: 1px solid #444; 
-            padding: 10px; min-width: 160px; background: #252525;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-        .node-header { font-weight: bold; border-bottom: 1px solid #444; margin-bottom: 8px; padding-bottom: 4px; font-size: 14px; color: #eee; }
-        .port { width: 10px; height: 10px; border-radius: 50%; position: absolute; box-shadow: 0 0 4px rgba(0,0,0,0.5); }
-        .port-in { left: -6px; background: #4caf50; }
-        .port-out { right: -6px; background: #2196f3; }
-        .port-label { font-size: 10px; position: absolute; color: #888; white-space: nowrap; }
+        body { font-family: 'Inter', sans-serif; background: #0f0f0f; color: #e0e0e0; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        header { background: #1a1a1a; padding: 10px 20px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+        .main { display: flex; flex: 1; overflow: hidden; }
+        .canvas-area { flex: 1; background: #121212; position: relative; background-image: radial-gradient(#333 1px, transparent 1px); background-size: 20px 20px; }
+        .side-panel { width: 320px; background: #1a1a1a; border-left: 1px solid #333; padding: 20px; display: flex; flex-direction: column; }
         
-        .toolbox-node { top: 50px; left: 50px; border-top: 4px solid #ffc107; }
-        .llm-node { top: 50px; left: 300px; border-top: 4px solid #2196f3; }
-        .if-node { top: 300px; left: 300px; border-top: 4px solid #9c27b0; }
-        .output-node { top: 300px; left: 600px; border-top: 4px solid #e91e63; }
+        .node { 
+            position: absolute; border-radius: 6px; border: 1px solid #444; 
+            padding: 12px; min-width: 180px; background: #252525;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .node-selected { border: 2px solid #2196f3; box-shadow: 0 0 10px rgba(33, 150, 243, 0.3); }
+        .node-header { font-weight: 600; margin-bottom: 10px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+        .node-type-icon { width: 12px; height: 12px; border-radius: 2px; }
+        
+        .port { width: 8px; height: 8px; border-radius: 50%; position: absolute; background: #666; border: 2px solid #252525; }
+        .port-message { background: #4caf50; box-shadow: 0 0 5px #4caf50; }
+        .port-toolbox { background: #ffc107; box-shadow: 0 0 5px #ffc107; }
+        .port-logic { background: #2196f3; box-shadow: 0 0 5px #2196f3; }
         
         .connection-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        
+        .form-group { margin-bottom: 16px; }
+        label { display: block; font-size: 11px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        input, textarea, select { width: 100%; background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px; box-sizing: border-box; font-family: inherit; font-size: 13px; }
+        
+        .btn { background: #2196f3; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 13px; }
     </style>
 </head>
 <body>
-    <h2 style="color: #4db8ff;">Visual Agent v1: ADK Node Architecture</h2>
-    <p style="color: #aaa; font-size: 14px;">The proposed design for the expanded JSON schema and editor support.</p>
-    <div class="canvas">
-        <svg class="connection-svg">
-            <path d="M 210 100 C 250 100, 250 125, 294 125" stroke="#555" stroke-width="2" fill="none" stroke-dasharray="5,5" />
-            <path d="M 460 110 C 500 110, 250 350, 294 350" stroke="#555" stroke-width="2" fill="none" stroke-dasharray="5,5" />
-        </svg>
+    <header>
+        <div style="font-weight: bold; color: #2196f3; font-size: 18px;">Visual Agent <span style="color: #666; font-weight: normal; font-size: 12px;">v1.0</span></div>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn" style="background: transparent; border: 1px solid #444;">Import</button>
+            <button class="btn">Export</button>
+        </div>
+    </header>
+    <div class="main">
+        <div class="canvas-area">
+            <svg class="connection-svg">
+                <!-- Toolbox to LLM (Amber) -->
+                <path d="M 230 140 C 270 140, 260 165, 294 165" stroke="#ffc107" stroke-width="2" fill="none" />
+                <!-- Input to LLM (Green) -->
+                <path d="M 100 140 C 140 140, 260 120, 294 120" stroke="#4caf50" stroke-width="2" fill="none" />
+                <!-- LLM to If (Blue) -->
+                <path d="M 480 140 C 520 140, 260 350, 294 350" stroke="#2196f3" stroke-width="2" fill="none" />
+            </svg>
 
-        <!-- Toolbox -->
-        <div class="node toolbox-node">
-            <div class="node-header">Toolbox Node</div>
-            <div style="font-size: 11px; line-height: 1.4;">
-                <span style="color: #ffc107;">MCP:</span> filesystem server-filesystem<br/>
-                <span style="color: #4caf50;">ADK:</span> google-search (built-in)<br/>
-                <span style="color: #2196f3;">Custom:</span> get_weather(city)
+            <!-- Input Node -->
+            <div class="node" style="top: 100px; left: 20px; border-top: 4px solid #4caf50; width: 120px; min-width: 80px;">
+                <div class="node-header">User Input</div>
+                <div class="port port-message" style="top: 50%; right: -6px;"></div>
             </div>
-            <div class="port port-out" style="top: 50%; background: #ffc107;"></div>
-            <span class="port-label" style="right: 8px; top: 43%;">toolbox</span>
-        </div>
 
-        <!-- LLM Agent -->
-        <div class="node llm-node">
-            <div class="node-header">LLM Agent (Gemini)</div>
-            <div style="font-size: 11px; line-height: 1.4;">
-                <b>Model:</b> gemini-2.5-flash<br/>
-                <b>Output Mode:</b> Structured JSON
+            <!-- Toolbox -->
+            <div class="node" style="top: 200px; left: 50px; border-top: 4px solid #ffc107;">
+                <div class="node-header"><div class="node-type-icon" style="background: #ffc107;"></div> Toolbox</div>
+                <div style="font-size: 11px; color: #aaa;">3 Tools / 1 MCP</div>
+                <div class="port port-out port-toolbox" style="top: 50%;"></div>
             </div>
-            <div class="port port-in" style="top: 30%; background: #4caf50;"></div>
-            <span class="port-label" style="left: 8px; top: 23%;">message</span>
-            
-            <div class="port port-in" style="top: 75%; background: #ffc107;"></div>
-            <span class="port-label" style="left: 8px; top: 68%;">toolbox</span>
-            
-            <div class="port port-out" style="top: 50%; background: #2196f3;"></div>
-            <span class="port-label" style="right: 8px; top: 43%;">response</span>
-        </div>
 
-        <!-- Logic: If/Else -->
-        <div class="node if-node">
-            <div class="node-header">If / Else</div>
-            <div style="font-size: 11px; color: #aaa; margin-bottom: 4px;">Condition (JSONPath/CEL):<br/><b>$.category == "billing"</b></div>
-            <div class="port port-in" style="top: 50%; background: #2196f3;"></div>
-            <span class="port-label" style="left: 8px; top: 43%;">data</span>
-            
-            <div class="port port-out" style="top: 30%; background: #4caf50;"></div>
-            <span class="port-label" style="right: 8px; top: 23%;">true</span>
-            
-            <div class="port port-out" style="top: 70%; background: #f44336;"></div>
-            <span class="port-label" style="right: 8px; top: 63%;">false</span>
-        </div>
+            <!-- LLM Agent -->
+            <div class="node node-selected" style="top: 100px; left: 300px; border-top: 4px solid #2196f3;">
+                <div class="node-header"><div class="node-type-icon" style="background: #2196f3;"></div> LLM Agent</div>
+                <div style="font-size: 11px; color: #aaa;">gemini-2.5-flash</div>
+                <div class="port port-in port-message" style="top: 30%; left: -6px;"></div>
+                <div class="port port-in port-toolbox" style="top: 75%; left: -6px;"></div>
+                <div class="port port-out port-logic" style="top: 50%;"></div>
+            </div>
 
-        <!-- Output -->
-        <div class="node output-node">
-            <div class="node-header">Final Output</div>
-            <div class="port port-in" style="top: 50%; background: #2196f3;"></div>
-            <span class="port-label" style="left: 8px; top: 43%;">in_res</span>
+            <!-- If/Else -->
+            <div class="node" style="top: 320px; left: 300px; border-top: 4px solid #9c27b0;">
+                <div class="node-header">If / Else</div>
+                <div class="port port-in port-logic" style="top: 50%; left: -6px;"></div>
+                <div class="port port-message" style="top: 30%; right: -6px;"></div>
+                <div class="port port-message" style="top: 70%; right: -6px;"></div>
+            </div>
+        </div>
+        <div class="side-panel">
+            <h3 style="margin-top: 0; font-size: 16px;">Node Configuration</h3>
+            <div class="form-group">
+                <label>Node Name</label>
+                <input type="text" value="llm_agent">
+            </div>
+            <div class="form-group">
+                <label>Model</label>
+                <select>
+                    <option>gemini-2.5-flash</option>
+                    <option>gemini-2.5-pro</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>System Instruction</label>
+                <textarea rows="4">You are a helpful assistant...</textarea>
+            </div>
+            <div class="form-group">
+                <label>Temperature</label>
+                <input type="range" min="0" max="1" step="0.1" value="0.7">
+            </div>
+            <div style="margin-top: auto;">
+                <button class="btn" style="width: 100%;">Update Node</button>
+            </div>
         </div>
     </div>
 </body>
