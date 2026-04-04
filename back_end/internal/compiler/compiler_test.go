@@ -16,13 +16,13 @@ type MockModel struct{}
 
 func (m *MockModel) Name() string { return "mock-model" }
 
-func (m *MockModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
+func (m *MockModel) GenerateContent(_ context.Context, _ *model.LLMRequest, _ bool) iter.Seq2[*model.LLMResponse, error] {
 	return func(yield func(*model.LLMResponse, error) bool) {
 		yield(&model.LLMResponse{}, nil)
 	}
 }
 
-func MockModelFactory(ctx context.Context, modelName string, cfg *genai.ClientConfig) (model.LLM, error) {
+func MockModelFactory(_ context.Context, _ string, _ *genai.ClientConfig) (model.LLM, error) {
 	return &MockModel{}, nil
 }
 
