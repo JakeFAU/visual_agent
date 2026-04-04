@@ -106,15 +106,22 @@ func (s *Server) Execute(c *gin.Context) {
 	c.Stream(func(_ io.Writer) bool {
 		for event, err := range rt.Execute(c.Request.Context(), compiled, req.Input) {
 			if err != nil {
-				c.SSEvent("error", err.Error())
+				data, _ := json.Marshal(gin.H{"type": "error", "content": err.Error()})
+				c.SSEvent("message", string(data))
 				return false
 			}
 			if event != nil {
-				data, _ := json.Marshal(event)
+				// Wrap the ADK event in our standard response type
+				data, _ := json.Marshal(gin.H{
+					"type":    "agent_event",
+					"content": event,
+					"author":  event.Author,
+				})
 				c.SSEvent("message", string(data))
 			}
 		}
-		c.SSEvent("done", "execution complete")
+		data, _ := json.Marshal(gin.H{"type": "done", "content": "execution complete"})
+		c.SSEvent("message", string(data))
 		return false
 	})
 }
