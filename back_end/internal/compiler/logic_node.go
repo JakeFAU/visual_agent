@@ -2,12 +2,12 @@ package compiler
 
 import (
 	"fmt"
+	"github.com/JakeFAU/visual_agent/internal/graph"
+	"github.com/google/cel-go/cel"
 	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/workflowagents/loopagent"
 	"google.golang.org/adk/session"
 	"iter"
-	"github.com/google/cel-go/cel"
-	"github.com/JakeFAU/visual_agent/internal/graph"
-	"google.golang.org/adk/agent/workflowagents/loopagent"
 )
 
 type IfElseNodeCompiler struct{}
@@ -18,8 +18,8 @@ func (c *IfElseNodeCompiler) Compile(node graph.Node, metadata map[string]interf
 		return nil, fmt.Errorf("invalid config for if_else_node")
 	}
 
-    trueAgent, _ := metadata["true_agent"].(string)
-    falseAgent, _ := metadata["false_agent"].(string)
+	trueAgent, _ := metadata["true_agent"].(string)
+	falseAgent, _ := metadata["false_agent"].(string)
 
 	return agent.New(agent.Config{
 		Name: node.ID,
@@ -77,30 +77,30 @@ func (c *IfElseNodeCompiler) Compile(node graph.Node, metadata map[string]interf
 
 type WhileNodeCompiler struct{}
 
-func (c *WhileNodeCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
+func (c *WhileNodeCompiler) Compile(node graph.Node, _ map[string]interface{}) (any, error) {
 	cfg, ok := node.Config.(graph.WhileNodeConfig)
 	if !ok {
 		return nil, fmt.Errorf("invalid config for while_node")
 	}
 
 	// Body agents would be compiled by the walker and passed here
-    // For v0 we'll use a dummy condition agent
-    condAgent, err := agent.New(agent.Config{
-        Name: node.ID + "_cond",
-        Run: func(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
-            return func(yield func(*session.Event, error) bool) {
-                // Simplified loop logic: always escalate to finish loop for now
-                yield(&session.Event{
-                    Actions: session.EventActions{
-                        Escalate: true,
-                    },
-                }, nil)
-            }
-        },
-    })
-    if err != nil {
-        return nil, err
-    }
+	// For v0 we'll use a dummy condition agent
+	condAgent, err := agent.New(agent.Config{
+		Name: node.ID + "_cond",
+		Run: func(_ agent.InvocationContext) iter.Seq2[*session.Event, error] {
+			return func(yield func(*session.Event, error) bool) {
+				// Simplified loop logic: always escalate to finish loop for now
+				yield(&session.Event{
+					Actions: session.EventActions{
+						Escalate: true,
+					},
+				}, nil)
+			}
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	return loopagent.New(loopagent.Config{
 		AgentConfig: agent.Config{

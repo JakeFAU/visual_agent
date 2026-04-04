@@ -2,16 +2,16 @@ package compiler
 
 import (
 	"fmt"
-	"os/exec"
 	"github.com/JakeFAU/visual_agent/internal/graph"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/mcptoolset"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"os/exec"
 )
 
 type ToolboxNodeCompiler struct{}
 
-func (c *ToolboxNodeCompiler) Compile(node graph.Node, metadata map[string]interface{}) (interface{}, error) {
+func (c *ToolboxNodeCompiler) Compile(node graph.Node, _ map[string]interface{}) (interface{}, error) {
 	cfg, ok := node.Config.(graph.ToolboxNodeConfig)
 	if !ok {
 		return nil, fmt.Errorf("invalid config for toolbox")

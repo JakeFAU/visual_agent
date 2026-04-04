@@ -32,7 +32,7 @@ func main() {
 		Use:   "run [file] [input]",
 		Short: "Compile and execute a JSON graph file",
 		Args:  cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			filePath := args[0]
 			input := args[1]
 
@@ -73,7 +73,7 @@ func main() {
 					return fmt.Errorf("execution error: %w", err)
 				}
 				if event != nil {
-					fmt.Printf("[%s] %v\n", event.Type, event.Content)
+					fmt.Printf("[%s] %v\n", event.Author, event.Content)
 				}
 			}
 
@@ -84,7 +84,7 @@ func main() {
 	var serveCmd = &cobra.Command{
 		Use:   "serve",
 		Short: "Start the Visual Agent API server",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			s, err := storage.New("data/graphs")
 			if err != nil {
 				return err

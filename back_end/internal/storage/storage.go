@@ -3,9 +3,9 @@ package storage
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/JakeFAU/visual_agent/internal/graph"
 	"os"
 	"path/filepath"
-	"github.com/JakeFAU/visual_agent/internal/graph"
 )
 
 type Storage struct {
@@ -20,9 +20,9 @@ func New(dir string) (*Storage, error) {
 }
 
 func (s *Storage) Save(g graph.Graph) error {
-    if g.Name == "" {
-        return fmt.Errorf("graph name cannot be empty")
-    }
+	if g.Name == "" {
+		return fmt.Errorf("graph name cannot be empty")
+	}
 	path := filepath.Join(s.dataDir, g.Name+".json")
 	data, err := json.MarshalIndent(g, "", "  ")
 	if err != nil {

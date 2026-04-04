@@ -3,7 +3,8 @@ import ReactFlow, {
   Background, 
   Controls, 
   Panel,
-  useReactFlow
+  useReactFlow,
+  BackgroundVariant
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -86,7 +87,7 @@ const App: React.FC = () => {
     const graph = exportGraph();
     try {
         await executeGraph(graph, userInput, (event) => {
-            addLog(event.type || 'message', event.content || event);
+            addLog(event.author || 'message', event.content || event);
         });
     } catch (e) {
         addLog('error', `Execution failed: ${e}`);
@@ -134,7 +135,7 @@ const App: React.FC = () => {
             nodeTypes={nodeTypes}
             fitView
           >
-            <Background color="#222" gap={20} variant={Background.Lines as any} />
+            <Background color="#222" gap={20} variant={BackgroundVariant.Lines} />
             <Controls className="!bg-gray-900 !border-gray-800 shadow-2xl" />
             <Panel position="top-left" className="bg-gray-900/80 backdrop-blur-md border border-gray-800 p-2 rounded shadow-xl">
                 <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Graph Status</div>

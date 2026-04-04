@@ -39,15 +39,15 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 	// 2. Pre-pass: Identify data flow state keys and toolset connections
 	outputMappings := make(map[string][]string)
 	toolsetMappings := make(map[string][]tool.Toolset)
-    
-    // Intermediate storage for compiled toolsets
-    toolboxResults := make(map[string][]tool.Toolset)
+
+	// Intermediate storage for compiled toolsets
+	toolboxResults := make(map[string][]tool.Toolset)
 
 	for _, edge := range g.Edges {
-        if edge.TargetPort == "in_toolbox" {
-            // This is a toolset connection
-            continue 
-        }
+		if edge.TargetPort == "in_toolbox" {
+			// This is a toolset connection
+			continue
+		}
 		outputMappings[edge.Source] = append(outputMappings[edge.Source], edge.TargetPort)
 	}
 
@@ -55,8 +55,10 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 	for _, node := range g.Nodes {
 		if node.Type == "toolbox" {
 			nc, ok := c.compilers[node.Type]
-			if !ok { continue }
-			
+			if !ok {
+				continue
+			}
+
 			res, err := nc.Compile(node, nil)
 			if err != nil {
 				return nil, fmt.Errorf("failed to compile toolbox %s: %w", node.ID, err)
@@ -79,11 +81,15 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 	// 5. Second Pass: Compile execution nodes (LLM, If/Else, etc.)
 	var agents []agent.Agent
 	for _, node := range sorted {
-        // Skip toolbox nodes in execution path
-        if node.Type == "toolbox" { continue }
+		// Skip toolbox nodes in execution path
+		if node.Type == "toolbox" {
+			continue
+		}
 
 		nc, ok := c.compilers[node.Type]
-		if !ok { continue }
+		if !ok {
+			continue
+		}
 
 		metadata := map[string]interface{}{
 			"output_keys": outputMappings[node.ID],
@@ -94,7 +100,7 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to compile node %s: %w", node.ID, err)
 		}
-		
+
 		if a, ok := res.(agent.Agent); ok {
 			agents = append(agents, a)
 		}

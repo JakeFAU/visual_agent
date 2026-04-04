@@ -64,8 +64,8 @@ func TestCompileSequential(t *testing.T) {
 	if compiled == nil {
 		t.Fatal("Expected compiled agent, got nil")
 	}
-    
-    t.Logf("Compiled agent type: %T", compiled)
+
+	t.Logf("Compiled agent type: %T", compiled)
 }
 
 func TestCompileIfElse(t *testing.T) {
