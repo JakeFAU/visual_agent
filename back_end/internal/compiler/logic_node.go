@@ -18,12 +18,13 @@ func (c *IfElseNodeCompiler) Compile(node graph.Node, metadata map[string]interf
 		return nil, fmt.Errorf("invalid config for if_else_node")
 	}
 
-    trueAgent, _ := metadata["true_agent"].(string)
-    falseAgent, _ := metadata["false_agent"].(string)
+	trueAgent, _ := metadata["true_agent"].(string)
+	falseAgent, _ := metadata["false_agent"].(string)
 
 	return agent.New(agent.Config{
 		Name: node.ID,
-		Run: func(_ agent.InvocationContext) iter.Seq2[*session.Event, error] {			return func(yield func(*session.Event, error) bool) {
+		Run: func(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
+			return func(yield func(*session.Event, error) bool) {
 				e, err := cel.NewEnv(
 					cel.Variable("state", cel.MapType(cel.StringType, cel.AnyType)),
 				)
