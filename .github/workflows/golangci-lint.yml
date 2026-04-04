@@ -10,16 +10,21 @@ permissions:
 
 jobs:
   golangci:
-    name: lint
+    name: golangci-lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v6
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          working-directory: back_end
+          go-version-file: go.mod
           cache: true
-          cache-dependency-path: back_end/go.sum
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
         with:
+          args: ./...
           working-directory: back_end
