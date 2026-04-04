@@ -37,16 +37,20 @@ export const executeGraph = async (graph: any, input: string, onEvent: (ev: { ty
   let buffer = '';
 
   const processLine = (line: string) => {
-    console.log("[DEBUG] SSE Raw Line:", line);
-    if (line.startsWith('data: ')) {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    
+    console.log("[DEBUG] SSE Raw Line:", trimmed);
+    if (trimmed.startsWith('data:')) {
         try {
-            const jsonStr = line.substring(6).trim();
+            // Find the first colon and take everything after it
+            const jsonStr = trimmed.substring(trimmed.indexOf(':') + 1).trim();
             if (jsonStr) {
                 const data = JSON.parse(jsonStr);
                 onEvent(data);
             }
         } catch (e) {
-            console.warn("[DEBUG] Failed to parse SSE JSON:", line, e);
+            console.warn("[DEBUG] Failed to parse SSE JSON:", trimmed, e);
         }
     }
   };

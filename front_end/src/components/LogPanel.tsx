@@ -43,7 +43,7 @@ export const LogPanel: React.FC<LogPanelProps> = ({ logs, isOpen, onToggle, onCl
       </div>
 
       {isOpen && (
-        <div ref={scrollRef} className="h-54 overflow-y-auto p-4 font-mono text-[11px] space-y-1 custom-scrollbar">
+        <div ref={scrollRef} className="h-[calc(100%-40px)] overflow-y-auto p-4 font-mono text-[11px] space-y-1 custom-scrollbar">
           {logs.map((log, i) => (
             <div key={i} className="flex gap-3 animate-in fade-in duration-300">
               <span className="text-gray-600 shrink-0">[{log.timestamp.toLocaleTimeString()}]</span>
