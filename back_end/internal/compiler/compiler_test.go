@@ -68,6 +68,55 @@ func TestCompileSequential(t *testing.T) {
     t.Logf("Compiled agent type: %T", compiled)
 }
 
+func TestCompileIfElse(t *testing.T) {
+	ifElseJSON := `{
+  "version": "1.0",
+  "name": "branching_workflow",
+  "nodes": [
+    {
+      "id": "if-1",
+      "type": "if_else_node",
+      "config": {
+        "condition_language": "CEL",
+        "condition": "state.category == 'billing'"
+      }
+    },
+    {
+      "id": "true-branch",
+      "type": "llm_node",
+      "config": { "name": "billing_agent" }
+    },
+    {
+      "id": "false-branch",
+      "type": "llm_node",
+      "config": { "name": "general_agent" }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "if-1", "source_port": "out_true", "target": "true-branch" },
+    { "id": "e2", "source": "if-1", "source_port": "out_false", "target": "false-branch" }
+  ]
+}`
+
+	var g graph.Graph
+	if err := json.Unmarshal([]byte(ifElseJSON), &g); err != nil {
+		t.Fatalf("Failed to unmarshal: %v", err)
+	}
+
+	c := New()
+	c.Register("llm_node", &LLMNodeCompiler{})
+	c.Register("if_else_node", &IfElseNodeCompiler{})
+
+	compiled, err := c.Compile(g)
+	if err != nil {
+		t.Fatalf("Compilation failed: %v", err)
+	}
+
+	if compiled == nil {
+		t.Fatal("Expected compiled agent, got nil")
+	}
+}
+
 func TestCompileCycle(t *testing.T) {
 	cycleJSON := `{
   "nodes": [

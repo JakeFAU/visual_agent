@@ -48,6 +48,8 @@ func main() {
 			c := compiler.New()
 			c.Register("llm_node", &compiler.LLMNodeCompiler{})
 			c.Register("toolbox", &compiler.ToolboxNodeCompiler{})
+			c.Register("if_else_node", &compiler.IfElseNodeCompiler{})
+			c.Register("while_node", &compiler.WhileNodeCompiler{})
 
 			// 2. Compile
 			compiledAgent, err := c.Compile(g)
