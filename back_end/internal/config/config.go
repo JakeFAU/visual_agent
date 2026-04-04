@@ -7,8 +7,9 @@ import (
 )
 
 type Config struct {
-	ProjectID string `mapstructure:"google_cloud_project"`
-	Location  string `mapstructure:"google_cloud_location"`
+	ProjectID   string `mapstructure:"google_cloud_project"`
+	Location    string `mapstructure:"google_cloud_location"`
+	RuntimeType string `mapstructure:"runtime_type"` // "vertex" or "local"
 }
 
 func Load() (*Config, error) {
@@ -17,6 +18,7 @@ func Load() (*Config, error) {
 	viper.AutomaticEnv()
 
 	viper.SetDefault("google_cloud_location", "us-central1")
+	viper.SetDefault("runtime_type", "local")
 
 	var cfg Config
 	if err := viper.Unmarshal(&cfg); err != nil {
