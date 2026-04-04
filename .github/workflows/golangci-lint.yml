@@ -19,8 +19,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          working-directory: back_end
-          go-version-file: go.mod
+          go-version-file: back_end/go.mod
           cache: true
 
       - name: Run golangci-lint
