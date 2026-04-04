@@ -84,7 +84,7 @@ func main() {
 	var serveCmd = &cobra.Command{
 		Use:   "serve",
 		Short: "Start the Visual Agent API server",
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			s, err := storage.New("data/graphs")
 			if err != nil {
 				return err

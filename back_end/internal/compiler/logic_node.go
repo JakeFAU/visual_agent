@@ -84,10 +84,11 @@ func (c *WhileNodeCompiler) Compile(node graph.Node, _ map[string]interface{}) (
 	}
 
 	// Body agents would be compiled by the walker and passed here
-    // For v0 we'll use a dummy condition agent
-    condAgent, err := agent.New(agent.Config{
-        Name: node.ID + "_cond",
-        Run: func(_ agent.InvocationContext) iter.Seq2[*session.Event, error] {			return func(yield func(*session.Event, error) bool) {
+	// For v0 we'll use a dummy condition agent
+	condAgent, err := agent.New(agent.Config{
+		Name: node.ID + "_cond",
+		Run: func(_ agent.InvocationContext) iter.Seq2[*session.Event, error] {
+			return func(yield func(*session.Event, error) bool) {
 				// Simplified loop logic: always escalate to finish loop for now
 				yield(&session.Event{
 					Actions: session.EventActions{
