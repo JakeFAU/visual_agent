@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: sans-serif; background: #1e1e1e; color: #fff; padding: 20px; }
+        .canvas { border: 2px solid #333; height: 600px; position: relative; background: #121212; overflow: hidden; border-radius: 8px; }
+        .node { 
+            position: absolute; border-radius: 8px; border: 1px solid #444; 
+            padding: 10px; min-width: 160px; background: #252525;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .node-header { font-weight: bold; border-bottom: 1px solid #444; margin-bottom: 8px; padding-bottom: 4px; font-size: 14px; color: #eee; }
+        .port { width: 10px; height: 10px; border-radius: 50%; position: absolute; box-shadow: 0 0 4px rgba(0,0,0,0.5); }
+        .port-in { left: -6px; background: #4caf50; }
+        .port-out { right: -6px; background: #2196f3; }
+        .port-label { font-size: 10px; position: absolute; color: #888; white-space: nowrap; }
+        
+        .toolbox-node { top: 50px; left: 50px; border-top: 4px solid #ffc107; }
+        .llm-node { top: 50px; left: 300px; border-top: 4px solid #2196f3; }
+        .if-node { top: 300px; left: 300px; border-top: 4px solid #9c27b0; }
+        .output-node { top: 300px; left: 600px; border-top: 4px solid #e91e63; }
+        
+        .connection-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <h2 style="color: #4db8ff;">Visual Agent v1: ADK Node Architecture</h2>
+    <p style="color: #aaa; font-size: 14px;">The proposed design for the expanded JSON schema and editor support.</p>
+    <div class="canvas">
+        <svg class="connection-svg">
+            <path d="M 210 100 C 250 100, 250 125, 294 125" stroke="#555" stroke-width="2" fill="none" stroke-dasharray="5,5" />
+            <path d="M 460 110 C 500 110, 250 350, 294 350" stroke="#555" stroke-width="2" fill="none" stroke-dasharray="5,5" />
+        </svg>
+
+        <!-- Toolbox -->
+        <div class="node toolbox-node">
+            <div class="node-header">Toolbox Node</div>
+            <div style="font-size: 11px; line-height: 1.4;">
+                <span style="color: #ffc107;">MCP:</span> filesystem server-filesystem<br/>
+                <span style="color: #4caf50;">ADK:</span> google-search (built-in)<br/>
+                <span style="color: #2196f3;">Custom:</span> get_weather(city)
+            </div>
+            <div class="port port-out" style="top: 50%; background: #ffc107;"></div>
+            <span class="port-label" style="right: 8px; top: 43%;">toolbox</span>
+        </div>
+
+        <!-- LLM Agent -->
+        <div class="node llm-node">
+            <div class="node-header">LLM Agent (Gemini)</div>
+            <div style="font-size: 11px; line-height: 1.4;">
+                <b>Model:</b> gemini-2.5-flash<br/>
+                <b>Output Mode:</b> Structured JSON
+            </div>
+            <div class="port port-in" style="top: 30%; background: #4caf50;"></div>
+            <span class="port-label" style="left: 8px; top: 23%;">message</span>
+            
+            <div class="port port-in" style="top: 75%; background: #ffc107;"></div>
+            <span class="port-label" style="left: 8px; top: 68%;">toolbox</span>
+            
+            <div class="port port-out" style="top: 50%; background: #2196f3;"></div>
+            <span class="port-label" style="right: 8px; top: 43%;">response</span>
+        </div>
+
+        <!-- Logic: If/Else -->
+        <div class="node if-node">
+            <div class="node-header">If / Else</div>
+            <div style="font-size: 11px; color: #aaa; margin-bottom: 4px;">Condition (JSONPath/CEL):<br/><b>$.category == "billing"</b></div>
+            <div class="port port-in" style="top: 50%; background: #2196f3;"></div>
+            <span class="port-label" style="left: 8px; top: 43%;">data</span>
+            
+            <div class="port port-out" style="top: 30%; background: #4caf50;"></div>
+            <span class="port-label" style="right: 8px; top: 23%;">true</span>
+            
+            <div class="port port-out" style="top: 70%; background: #f44336;"></div>
+            <span class="port-label" style="right: 8px; top: 63%;">false</span>
+        </div>
+
+        <!-- Output -->
+        <div class="node output-node">
+            <div class="node-header">Final Output</div>
+            <div class="port port-in" style="top: 50%; background: #2196f3;"></div>
+            <span class="port-label" style="left: 8px; top: 43%;">in_res</span>
+        </div>
+    </div>
+</body>
+</html>
