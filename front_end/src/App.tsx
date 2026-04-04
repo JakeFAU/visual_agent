@@ -17,6 +17,7 @@ import { IfElseNode } from './components/nodes/IfElseNode';
 import { WhileNode } from './components/nodes/WhileNode';
 import { SidePanel } from './components/SidePanel';
 import { LogPanel } from './components/LogPanel';
+import { Palette } from './components/Palette';
 import { saveGraph, executeGraph, loadGraphs, API_BASE } from './api/client';
 
 const App: React.FC = () => {

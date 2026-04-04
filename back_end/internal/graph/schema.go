@@ -22,11 +22,11 @@ type LLMNodeConfig struct {
 	Instruction           string                 `json:"instruction"`
 	ResponseMode          string                 `json:"response_mode"` // "text" or "json"
 	OutputSchema          map[string]interface{} `json:"output_schema,omitempty"`
-	GenerateContentConfig GenerateContentConfig `json:"generate_content_config"`
+	GenerateContentConfig GenerateContentConfig  `json:"generate_content_config"`
 }
 
 type GenerateContentConfig struct {
-	Temperature      float64 `json:"temperature,omitempty"`
+	Temperature     float64 `json:"temperature,omitempty"`
 	MaxOutputTokens int     `json:"max_output_tokens,omitempty"`
 }
 
