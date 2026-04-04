@@ -54,7 +54,7 @@ export const LogPanel: React.FC<LogPanelProps> = ({ logs, isOpen, onToggle, onCl
                 {log.type}
               </span>
               <span className="text-gray-300 break-all">
-                {typeof log.content === 'string' ? log.content : JSON.stringify(log.content)}
+                {typeof log.content === 'string' ? log.content : (log.content?.message || JSON.stringify(log.content))}
               </span>
             </div>
           ))}

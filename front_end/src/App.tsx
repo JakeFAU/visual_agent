@@ -125,8 +125,7 @@ const App: React.FC = () => {
             
             let logContent = event.content;
             
-            // ADK events embed model.LLMResponse, which contains genai.Content
-            // We need to handle both uppercase (Go default) and lowercase (JSON tags)
+            // ADK events embed model.LLMResponse
             const content = event.content?.Content || event.content?.content;
             const parts = content?.Parts || content?.parts;
 
@@ -134,12 +133,14 @@ const App: React.FC = () => {
                 const text = parts.map((p: any) => p.Text || p.text || "").join('');
                 if (text) {
                     logContent = text;
-                } else {
-                    // It might be a tool call or other structured part
+                } else if (parts.length > 0) {
                     logContent = JSON.stringify(parts);
                 }
-            } else if (event.type === 'agent_event' && !logContent) {
-                logContent = "Agent message received (no text content)";
+            } else if (event.type === 'agent_event' && event.content?.Actions?.StateDelta?.message) {
+                // Check state delta as fallback
+                logContent = event.content.Actions.StateDelta.message;
+            } else if (event.type === 'agent_event' && event.content?.actions?.stateDelta?.message) {
+                logContent = event.content.actions.stateDelta.message;
             }
 
             addLog(logType, logContent);
