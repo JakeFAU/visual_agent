@@ -25,8 +25,6 @@ func New(s *storage.Storage) *Server {
 	r.Use(cors.Default())
 
 	c := compiler.New()
-	c.Register("input_node", &compiler.LLMNodeCompiler{})  // Dummy for now
-	c.Register("output_node", &compiler.LLMNodeCompiler{}) // Dummy for now
 	c.Register("llm_node", &compiler.LLMNodeCompiler{})
 	c.Register("toolbox", &compiler.ToolboxNodeCompiler{})
 	c.Register("if_else_node", &compiler.IfElseNodeCompiler{})
