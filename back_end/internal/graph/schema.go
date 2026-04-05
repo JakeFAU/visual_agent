@@ -89,6 +89,17 @@ type Graph struct {
 	Edges   []Edge `json:"edges"`
 }
 
+func (n Node) AgentName() (string, bool) {
+	switch cfg := n.Config.(type) {
+	case LLMNodeConfig:
+		return cfg.Name, true
+	case IfElseNodeConfig:
+		return n.ID, true
+	default:
+		return "", false
+	}
+}
+
 func (n *Node) UnmarshalJSON(data []byte) error {
 	type Alias Node
 	aux := &struct {

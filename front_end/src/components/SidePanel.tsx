@@ -136,21 +136,14 @@ export const SidePanel: React.FC = () => {
           </div>
         )}
 
-        {(selectedNode.type === 'if_else_node' || selectedNode.type === 'while_node') && (
+        {selectedNode.type === 'if_else_node' && (
             <div className="space-y-4">
-                {selectedNode.type === 'if_else_node' && (
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Language</label>
-                        <select
-                            value={config.condition_language}
-                            onChange={(e) => handleChange('condition_language', e.target.value)}
-                            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        >
-                            <option value="CEL">Common Expression Language (CEL)</option>
-                            <option value="JSONPath">JSONPath</option>
-                        </select>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Language</label>
+                    <div className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white">
+                        Common Expression Language (CEL)
                     </div>
-                )}
+                </div>
                 <div className="space-y-2">
                     <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Condition</label>
                     <textarea
@@ -160,17 +153,6 @@ export const SidePanel: React.FC = () => {
                         placeholder="e.g. state.category == 'billing'"
                     />
                 </div>
-                {selectedNode.type === 'while_node' && (
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Max Iterations</label>
-                        <input
-                            type="number"
-                            value={config.max_iterations}
-                            onChange={(e) => handleChange('max_iterations', parseInt(e.target.value))}
-                            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                    </div>
-                )}
             </div>
         )}
       </div>

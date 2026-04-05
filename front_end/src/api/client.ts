@@ -6,11 +6,34 @@ export const saveGraph = async (graph: any) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(graph),
   });
+
+  if (!resp.ok) {
+    const error = await resp.json().catch(() => null);
+    throw new Error(error?.error || 'Failed to save graph');
+  }
+
   return resp.json();
 };
 
 export const loadGraphs = async () => {
   const resp = await fetch(`${API_BASE}/graphs`);
+
+  if (!resp.ok) {
+    const error = await resp.json().catch(() => null);
+    throw new Error(error?.error || 'Failed to load graphs');
+  }
+
+  return resp.json();
+};
+
+export const loadGraph = async (name: string) => {
+  const resp = await fetch(`${API_BASE}/graphs/${encodeURIComponent(name)}`);
+
+  if (!resp.ok) {
+    const error = await resp.json().catch(() => null);
+    throw new Error(error?.error || `Failed to load graph '${name}'`);
+  }
+
   return resp.json();
 };
 

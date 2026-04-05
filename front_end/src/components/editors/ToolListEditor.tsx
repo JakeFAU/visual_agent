@@ -7,8 +7,6 @@ interface ToolListEditorProps {
 
 const AVAILABLE_TOOLS = [
   { id: 'google_search', name: 'Google Search', description: 'Search the web for real-time information.' },
-  { id: 'code_interpreter', name: 'Code Interpreter', description: 'Execute Python code in a secure sandbox.' },
-  { id: 'file_system_browser', name: 'File Browser', description: 'Read and list files in allowed directories.' },
 ];
 
 export const ToolListEditor: React.FC<ToolListEditorProps> = ({ selectedTools, onChange }) => {

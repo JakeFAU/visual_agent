@@ -21,6 +21,10 @@ type BaseRuntime struct {
 	sessionService session.Service
 }
 
+func newUserMessage(input string) *genai.Content {
+	return genai.NewContentFromText(input, genai.RoleUser)
+}
+
 func (r *BaseRuntime) Execute(ctx context.Context, a agent.Agent, input string) iter.Seq2[*session.Event, error] {
 	adkRunner, err := runner.New(runner.Config{
 		AppName:           "VisualAgent",
@@ -34,9 +38,7 @@ func (r *BaseRuntime) Execute(ctx context.Context, a agent.Agent, input string) 
 		}
 	}
 
-	return adkRunner.Run(ctx, "default-user", "default-session", &genai.Content{
-		Parts: []*genai.Part{{Text: input}},
-	}, agent.RunConfig{})
+	return adkRunner.Run(ctx, "default-user", "default-session", newUserMessage(input), agent.RunConfig{})
 }
 
 // NewVertexRuntime returns a runtime powered by Vertex AI

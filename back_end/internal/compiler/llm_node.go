@@ -60,6 +60,16 @@ func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface
 		Instruction: cfg.Instruction,
 	}
 
+	if cfg.GenerateContentConfig != (graph.GenerateContentConfig{}) {
+		genCfg := &genai.GenerateContentConfig{}
+		temp := float32(cfg.GenerateContentConfig.Temperature)
+		genCfg.Temperature = &temp
+		if cfg.GenerateContentConfig.MaxOutputTokens > 0 {
+			genCfg.MaxOutputTokens = int32(cfg.GenerateContentConfig.MaxOutputTokens)
+		}
+		llmCfg.GenerateContentConfig = genCfg
+	}
+
 	if cfg.ResponseMode == "json" && cfg.OutputSchema != nil {
 		schemaBytes, _ := json.Marshal(cfg.OutputSchema)
 		var schema genai.Schema
@@ -76,6 +86,9 @@ func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface
 
 	// Apply toolsets if present
 	if toolsets, ok := metadata["toolsets"].([]tool.Toolset); ok {
+		if cfg.ResponseMode == "json" && len(toolsets) > 0 {
+			return nil, fmt.Errorf("json response mode cannot be used with toolbox tools")
+		}
 		llmCfg.Toolsets = toolsets
 	}
 
