@@ -1,5 +1,7 @@
 services:
   backend:
+    # The backend keeps graph persistence in a named volume so quickstart users
+    # do not lose saved workflows every time the containers are recreated.
     build:
       context: ./back_end
       dockerfile: Dockerfile
@@ -15,6 +17,8 @@ services:
       - visual-agent-graphs:/app/data/graphs
 
   frontend:
+    # The frontend image is static and delegates API traffic to the backend
+    # service through nginx.
     build:
       context: ./front_end
       dockerfile: Dockerfile

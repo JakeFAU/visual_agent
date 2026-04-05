@@ -13,6 +13,10 @@ type Config struct {
 	ServerAddr  string `mapstructure:"server_addr"`
 }
 
+// Load reads Visual Agent configuration from environment variables.
+//
+// Supported variables use the VISUAL_AGENT_ prefix for app-owned settings, for
+// example VISUAL_AGENT_RUNTIME_TYPE and VISUAL_AGENT_SERVER_ADDR.
 func Load() (*Config, error) {
 	viper.SetEnvPrefix("VISUAL_AGENT")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))

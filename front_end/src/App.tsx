@@ -131,6 +131,9 @@ const App: React.FC = () => {
     addLog('info', `Input: ${userInput}`);
     
     const graph = exportGraph();
+    // Output nodes declare which state keys represent user-facing results.
+    // Those keys are later used to prefer structured workflow outputs over raw
+    // transport events when populating the log and final-response panels.
     const outputKeys = graph.nodes
       .filter((node: any) => node.type === 'output_node')
       .map((node: any) => node.config.output_key)
@@ -141,6 +144,9 @@ const App: React.FC = () => {
             console.log("[DEBUG] IDE Received Event:", JSON.stringify(event, null, 2));
             
             const logType = event.type === 'agent_event' ? (event.author || 'agent') : event.type;
+            // Log rendering is intentionally more forgiving than the final
+            // response panel so intermediate state deltas and tool events remain
+            // visible during execution.
             const responseText = extractFinalResponse(event, outputKeys);
             const logContent = responseText ?? extractDisplayContent(event, outputKeys) ?? event.content;
 

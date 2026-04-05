@@ -22,9 +22,13 @@ type Server struct {
 	compiler *compiler.Compiler
 }
 
+// New constructs the HTTP server and registers the node compilers required by
+// the API execution path.
 func New(s *storage.Storage) *Server {
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
+		// The browser UI is intended to run on the same machine as the backend, so
+		// only loopback origins are accepted by default.
 		AllowOriginFunc: func(origin string) bool {
 			u, err := url.Parse(origin)
 			if err != nil {
@@ -58,6 +62,7 @@ func New(s *storage.Storage) *Server {
 	return srv
 }
 
+// routes registers the REST and SSE endpoints consumed by the frontend.
 func (s *Server) routes() {
 	s.router.GET("/api/graphs", s.ListGraphs)
 	s.router.GET("/api/graphs/:name", s.GetGraph)
@@ -65,10 +70,12 @@ func (s *Server) routes() {
 	s.router.POST("/api/execute", s.Execute)
 }
 
+// Run starts the HTTP server at the configured address.
 func (s *Server) Run(addr string) error {
 	return s.router.Run(addr)
 }
 
+// ListGraphs returns the names of all saved workflow documents.
 func (s *Server) ListGraphs(c *gin.Context) {
 	names, err := s.storage.List()
 	if err != nil {
@@ -78,6 +85,7 @@ func (s *Server) ListGraphs(c *gin.Context) {
 	c.JSON(http.StatusOK, names)
 }
 
+// GetGraph loads a single saved graph by name.
 func (s *Server) GetGraph(c *gin.Context) {
 	name := c.Param("name")
 	g, err := s.storage.Load(name)
@@ -88,6 +96,7 @@ func (s *Server) GetGraph(c *gin.Context) {
 	c.JSON(http.StatusOK, g)
 }
 
+// SaveGraph validates and persists a workflow document sent by the frontend.
 func (s *Server) SaveGraph(c *gin.Context) {
 	var g graph.Graph
 	if err := c.ShouldBindJSON(&g); err != nil {
@@ -105,11 +114,14 @@ func (s *Server) SaveGraph(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "saved"})
 }
 
+// ExecuteRequest is the JSON payload accepted by POST /api/execute.
 type ExecuteRequest struct {
 	Graph graph.Graph `json:"graph"`
 	Input string      `json:"input"`
 }
 
+// Execute validates the submitted graph, compiles it, and streams execution
+// events back to the client using server-sent events.
 func (s *Server) Execute(c *gin.Context) {
 	fmt.Println("[DEBUG] Execute endpoint called")
 	var req ExecuteRequest
@@ -131,6 +143,8 @@ func (s *Server) Execute(c *gin.Context) {
 		return
 	}
 
+	// API execution uses the local in-memory runtime because the compiled agent
+	// already encapsulates model access and tool wiring.
 	rt := runtime.NewLocalRuntime()
 
 	fmt.Println("[DEBUG] Starting SSE stream")

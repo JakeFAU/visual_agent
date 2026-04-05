@@ -12,6 +12,8 @@ func isToolboxEdge(edge graph.Edge) bool {
 	return edge.TargetPort == "in_toolbox" || edge.TargetPort == "toolbox_handle"
 }
 
+// Both handle conventions are supported so saved graphs created before and
+// after the port rename continue to compile.
 func isIfElseTrueEdge(edge graph.Edge) bool {
 	return edge.SourcePort == "message:true" || edge.SourcePort == "out_true"
 }
@@ -31,16 +33,24 @@ type Compiler struct {
 	compilers map[string]NodeCompiler
 }
 
+// New constructs a compiler with an empty node-compiler registry.
 func New() *Compiler {
 	return &Compiler{
 		compilers: make(map[string]NodeCompiler),
 	}
 }
 
+// Register associates a graph node type with the compiler responsible for
+// translating it into an ADK representation.
 func (c *Compiler) Register(nodeType string, nc NodeCompiler) {
 	c.compilers[nodeType] = nc
 }
 
+// Compile translates an entire validated graph into a runnable ADK agent.
+//
+// The method performs a graph-level pre-pass to derive output keys, toolbox
+// wiring, and control-flow branch targets before delegating node-specific work
+// to registered NodeCompilers.
 func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 	fmt.Printf("[DEBUG] Starting compilation for graph: %s\n", g.Name)
 
@@ -199,6 +209,8 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 	})
 }
 
+// sortNodes performs a topological sort over the graph so execution nodes are
+// compiled in dependency order and cycles are rejected up front.
 func (c *Compiler) sortNodes(g graph.Graph) ([]graph.Node, error) {
 	adj := make(map[string][]string)
 	inDegree := make(map[string]int)

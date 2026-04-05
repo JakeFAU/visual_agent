@@ -1,3 +1,4 @@
+# Build the static frontend bundle with the API base baked in at build time.
 FROM node:20-bookworm-slim AS build
 
 WORKDIR /app
@@ -12,6 +13,8 @@ ENV VITE_API_BASE=${VITE_API_BASE}
 
 RUN npm run build
 
+# Serve the compiled SPA and proxy /api requests to the backend service in
+# Docker Compose.
 FROM nginx:alpine
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf

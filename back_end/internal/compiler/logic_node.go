@@ -11,6 +11,9 @@ import (
 
 type IfElseNodeCompiler struct{}
 
+// Compile turns an if_else_node into a lightweight ADK agent whose only job is
+// to evaluate the configured CEL expression and transfer control to the chosen
+// downstream agent.
 func (c *IfElseNodeCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
 	cfg, ok := node.Config.(graph.IfElseNodeConfig)
 	if !ok {
@@ -79,6 +82,8 @@ func (c *IfElseNodeCompiler) Compile(node graph.Node, metadata map[string]interf
 
 type WhileNodeCompiler struct{}
 
+// Compile rejects while_node usage until loop semantics are implemented in the
+// backend.
 func (c *WhileNodeCompiler) Compile(node graph.Node, _ map[string]interface{}) (any, error) {
 	if _, ok := node.Config.(graph.WhileNodeConfig); !ok {
 		return nil, fmt.Errorf("invalid config for while_node")
@@ -86,6 +91,8 @@ func (c *WhileNodeCompiler) Compile(node graph.Node, _ map[string]interface{}) (
 	return nil, fmt.Errorf("while_node is not supported in v0")
 }
 
+// sessionStateToMap copies ADK session state into a regular Go map so it can be
+// passed into CEL evaluation.
 func sessionStateToMap(state session.ReadonlyState) map[string]any {
 	values := make(map[string]any)
 	if state == nil {

@@ -1,9 +1,14 @@
+// ExecutionEvent is the frontend-normalized shape used by the log and response
+// panels, independent of the exact ADK event payload casing.
 export interface ExecutionEvent {
   type: string;
   content: any;
   author?: string;
 }
 
+// The backend currently forwards raw ADK events, which may use either Go-style
+// exported field names or camelCase names depending on where the payload was
+// produced. These helpers normalize both shapes.
 const getStateDelta = (content: any): Record<string, unknown> | null => {
   return content?.Actions?.StateDelta ?? content?.actions?.stateDelta ?? null;
 };
@@ -45,6 +50,8 @@ const getTextFromParts = (parts: any[]): string | null => {
   return text.trim() ? text : null;
 };
 
+// extractDisplayContent prefers explicit output state keys first, then falls
+// back to message parts, then finally stringifies the raw payload for logging.
 export const extractDisplayContent = (event: ExecutionEvent, outputKeys: string[] = []): string | null => {
   const stateDelta = getStateDelta(event.content);
   const prioritizedKeys = [...outputKeys, 'message', 'result'];
@@ -68,9 +75,11 @@ export const extractDisplayContent = (event: ExecutionEvent, outputKeys: string[
     return stringifyValue(stateDelta);
   }
 
-  return stringifyValue(event.content);
+	return stringifyValue(event.content);
 };
 
+// extractFinalResponse is stricter than extractDisplayContent: it only returns
+// content appropriate for the "final answer" panel.
 export const extractFinalResponse = (event: ExecutionEvent, outputKeys: string[] = []): string | null => {
   const stateDelta = getStateDelta(event.content);
   const prioritizedKeys = [...outputKeys, 'message', 'result'];
@@ -84,9 +93,11 @@ export const extractFinalResponse = (event: ExecutionEvent, outputKeys: string[]
     }
   }
 
-  return getTextFromParts(getParts(event.content));
+	return getTextFromParts(getParts(event.content));
 };
 
+// isFinalAgentResponse filters out partial ADK events so the UI only snapshots
+// complete model responses in the final-response panel.
 export const isFinalAgentResponse = (event: ExecutionEvent): boolean => {
   if (event.type !== 'agent_event') {
     return false;

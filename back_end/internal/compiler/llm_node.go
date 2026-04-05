@@ -17,11 +17,16 @@ import (
 // ModelFactory is a function that creates a new LLM model instance.
 type ModelFactory func(ctx context.Context, modelName string, cfg *genai.ClientConfig) (model.LLM, error)
 
+// LLMNodeCompiler converts an llm_node contract entry into an ADK llmagent.
 type LLMNodeCompiler struct {
 	// NewModel allows overriding the model creation for testing.
 	NewModel ModelFactory
 }
 
+// Compile builds an ADK llmagent from the graph contract and compiler metadata.
+//
+// Metadata currently carries output-key wiring and any toolsets sourced from
+// connected toolbox nodes.
 func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
 	cfg, ok := node.Config.(graph.LLMNodeConfig)
 	if !ok {
@@ -33,7 +38,7 @@ func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface
 	if apiKey != "" {
 		clientCfg.APIKey = apiKey
 	} else {
-		// Use Vertex AI with ADC
+		// Fall back to Vertex AI configuration when an API key is not present.
 		clientCfg.Backend = genai.BackendVertexAI
 		clientCfg.Project = os.Getenv("GOOGLE_CLOUD_PROJECT")
 		clientCfg.Location = os.Getenv("GOOGLE_CLOUD_LOCATION")
@@ -79,12 +84,15 @@ func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface
 		llmCfg.OutputSchema = &schema
 	}
 
-	// Apply output keys from walker if present
+	// Output nodes are represented as state keys, so the compiler passes the
+	// resolved key name through metadata instead of creating a standalone ADK
+	// output agent.
 	if keys, ok := metadata["output_keys"].([]string); ok && len(keys) > 0 {
 		llmCfg.OutputKey = keys[0]
 	}
 
-	// Apply toolsets if present
+	// Toolsets are compiled separately because a single toolbox node may fan out
+	// to multiple execution nodes.
 	if toolsets, ok := metadata["toolsets"].([]tool.Toolset); ok {
 		if cfg.ResponseMode == "json" && len(toolsets) > 0 {
 			return nil, fmt.Errorf("json response mode cannot be used with toolbox tools")
