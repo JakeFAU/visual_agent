@@ -5,7 +5,6 @@ import (
 	"github.com/JakeFAU/visual_agent/internal/graph"
 	"github.com/google/cel-go/cel"
 	"google.golang.org/adk/agent"
-	"google.golang.org/adk/agent/workflowagents/loopagent"
 	"google.golang.org/adk/session"
 	"iter"
 )
@@ -17,35 +16,38 @@ func (c *IfElseNodeCompiler) Compile(node graph.Node, metadata map[string]interf
 	if !ok {
 		return nil, fmt.Errorf("invalid config for if_else_node")
 	}
+	if cfg.ConditionLanguage != "CEL" {
+		return nil, fmt.Errorf("unsupported condition language %q", cfg.ConditionLanguage)
+	}
 
 	trueAgent, _ := metadata["true_agent"].(string)
 	falseAgent, _ := metadata["false_agent"].(string)
+	if trueAgent == "" || falseAgent == "" {
+		return nil, fmt.Errorf("if_else_node requires both true and false branch targets")
+	}
+
+	env, err := cel.NewEnv(
+		cel.Variable("state", cel.MapType(cel.StringType, cel.AnyType)),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create CEL env: %w", err)
+	}
+
+	ast, issues := env.Compile(cfg.Condition)
+	if issues != nil && issues.Err() != nil {
+		return nil, fmt.Errorf("CEL compile error: %w", issues.Err())
+	}
+
+	program, err := env.Program(ast)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create CEL program: %w", err)
+	}
 
 	return agent.New(agent.Config{
 		Name: node.ID,
 		Run: func(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
 			return func(yield func(*session.Event, error) bool) {
-				e, err := cel.NewEnv(
-					cel.Variable("state", cel.MapType(cel.StringType, cel.AnyType)),
-				)
-				if err != nil {
-					yield(nil, fmt.Errorf("failed to create CEL env: %w", err))
-					return
-				}
-
-				ast, issues := e.Compile(cfg.Condition)
-				if issues.Err() != nil {
-					yield(nil, fmt.Errorf("CEL compile error: %w", issues.Err()))
-					return
-				}
-
-				program, err := e.Program(ast)
-				if err != nil {
-					yield(nil, fmt.Errorf("failed to create program: %w", err))
-					return
-				}
-
-				state := ctx.Session().State()
+				state := sessionStateToMap(ctx.Session().State())
 				out, _, err := program.Eval(map[string]interface{}{
 					"state": state,
 				})
@@ -78,35 +80,19 @@ func (c *IfElseNodeCompiler) Compile(node graph.Node, metadata map[string]interf
 type WhileNodeCompiler struct{}
 
 func (c *WhileNodeCompiler) Compile(node graph.Node, _ map[string]interface{}) (any, error) {
-	cfg, ok := node.Config.(graph.WhileNodeConfig)
-	if !ok {
+	if _, ok := node.Config.(graph.WhileNodeConfig); !ok {
 		return nil, fmt.Errorf("invalid config for while_node")
 	}
+	return nil, fmt.Errorf("while_node is not supported in v0")
+}
 
-	// Body agents would be compiled by the walker and passed here
-	// For v0 we'll use a dummy condition agent
-	condAgent, err := agent.New(agent.Config{
-		Name: node.ID + "_cond",
-		Run: func(_ agent.InvocationContext) iter.Seq2[*session.Event, error] {
-			return func(yield func(*session.Event, error) bool) {
-				// Simplified loop logic: always escalate to finish loop for now
-				yield(&session.Event{
-					Actions: session.EventActions{
-						Escalate: true,
-					},
-				}, nil)
-			}
-		},
-	})
-	if err != nil {
-		return nil, err
+func sessionStateToMap(state session.ReadonlyState) map[string]any {
+	values := make(map[string]any)
+	if state == nil {
+		return values
 	}
-
-	return loopagent.New(loopagent.Config{
-		AgentConfig: agent.Config{
-			Name:      node.ID,
-			SubAgents: []agent.Agent{condAgent},
-		},
-		MaxIterations: uint(cfg.MaxIterations),
-	})
+	for key, value := range state.All() {
+		values[key] = value
+	}
+	return values
 }

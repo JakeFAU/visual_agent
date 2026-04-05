@@ -119,9 +119,6 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       case 'if_else_node':
         config = { condition_language: 'CEL', condition: 'state.category == "billing"' };
         break;
-      case 'while_node':
-        config = { condition: 'state.counter < 5', max_iterations: 10 };
-        break;
     }
 
     const newNode: Node = {

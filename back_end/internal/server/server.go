@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"time"
 
 	"github.com/JakeFAU/visual_agent/internal/compiler"
 	"github.com/JakeFAU/visual_agent/internal/graph"
@@ -22,7 +24,23 @@ type Server struct {
 
 func New(s *storage.Storage) *Server {
 	r := gin.Default()
-	r.Use(cors.Default())
+	r.Use(cors.New(cors.Config{
+		AllowOriginFunc: func(origin string) bool {
+			u, err := url.Parse(origin)
+			if err != nil {
+				return false
+			}
+			switch u.Hostname() {
+			case "localhost", "127.0.0.1":
+				return true
+			default:
+				return false
+			}
+		},
+		AllowMethods: []string{"GET", "POST", "OPTIONS"},
+		AllowHeaders: []string{"Origin", "Content-Type", "Accept"},
+		MaxAge:       12 * time.Hour,
+	}))
 
 	c := compiler.New()
 	c.Register("llm_node", &compiler.LLMNodeCompiler{})
@@ -76,6 +94,10 @@ func (s *Server) SaveGraph(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if err := g.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	if err := s.storage.Save(g); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -96,12 +118,16 @@ func (s *Server) Execute(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if err := req.Graph.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	fmt.Printf("[DEBUG] Compiling graph: %s\n", req.Graph.Name)
 	compiled, err := s.compiler.Compile(req.Graph)
 	if err != nil {
 		fmt.Printf("[DEBUG] Compilation failed: %v\n", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("compilation failed: %v", err)})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("compilation failed: %v", err)})
 		return
 	}
 

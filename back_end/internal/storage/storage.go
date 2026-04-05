@@ -6,6 +6,7 @@ import (
 	"github.com/JakeFAU/visual_agent/internal/graph"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Storage struct {
@@ -13,17 +14,21 @@ type Storage struct {
 }
 
 func New(dir string) (*Storage, error) {
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
 		return nil, err
 	}
-	return &Storage{dataDir: dir}, nil
+	if err := os.MkdirAll(absDir, 0755); err != nil {
+		return nil, err
+	}
+	return &Storage{dataDir: absDir}, nil
 }
 
 func (s *Storage) Save(g graph.Graph) error {
-	if g.Name == "" {
-		return fmt.Errorf("graph name cannot be empty")
+	path, err := s.graphFilePath(g.Name)
+	if err != nil {
+		return err
 	}
-	path := filepath.Join(s.dataDir, g.Name+".json")
 	data, err := json.MarshalIndent(g, "", "  ")
 	if err != nil {
 		return err
@@ -32,7 +37,10 @@ func (s *Storage) Save(g graph.Graph) error {
 }
 
 func (s *Storage) Load(name string) (*graph.Graph, error) {
-	path := filepath.Join(s.dataDir, name+".json")
+	path, err := s.graphFilePath(name)
+	if err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -56,4 +64,25 @@ func (s *Storage) List() ([]string, error) {
 		}
 	}
 	return names, nil
+}
+
+func (s *Storage) graphFilePath(name string) (string, error) {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return "", fmt.Errorf("graph name cannot be empty")
+	}
+	if strings.Contains(trimmed, "/") || strings.Contains(trimmed, "\\") {
+		return "", fmt.Errorf("graph name cannot contain path separators")
+	}
+
+	path := filepath.Join(s.dataDir, trimmed+".json")
+	cleanPath := filepath.Clean(path)
+	relPath, err := filepath.Rel(s.dataDir, cleanPath)
+	if err != nil {
+		return "", err
+	}
+	if relPath == ".." || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("graph name resolves outside the storage directory")
+	}
+	return cleanPath, nil
 }

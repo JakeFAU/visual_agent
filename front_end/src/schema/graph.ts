@@ -45,7 +45,7 @@ const ToolboxNodeConfigSchema = z.object({
 });
 
 const IfElseNodeConfigSchema = z.object({
-  condition_language: z.enum(["CEL", "JSONPath"]),
+  condition_language: z.literal("CEL"),
   condition: z.string(),
 });
 
@@ -84,12 +84,6 @@ const NodeSchema = z.discriminatedUnion("type", [
     type: z.literal("if_else_node"),
     position: PositionSchema,
     config: IfElseNodeConfigSchema,
-  }),
-  z.object({
-    id: z.string(),
-    type: z.literal("while_node"),
-    position: PositionSchema,
-    config: WhileNodeConfigSchema,
   }),
 ]);
 

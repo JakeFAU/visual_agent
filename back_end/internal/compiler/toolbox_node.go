@@ -4,12 +4,28 @@ import (
 	"fmt"
 	"github.com/JakeFAU/visual_agent/internal/graph"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"google.golang.org/adk/agent"
 	"google.golang.org/adk/tool"
+	"google.golang.org/adk/tool/geminitool"
 	"google.golang.org/adk/tool/mcptoolset"
+	"os"
 	"os/exec"
 )
 
 type ToolboxNodeCompiler struct{}
+
+type staticToolset struct {
+	name  string
+	tools []tool.Tool
+}
+
+func (s *staticToolset) Name() string {
+	return s.name
+}
+
+func (s *staticToolset) Tools(agent.ReadonlyContext) ([]tool.Tool, error) {
+	return s.tools, nil
+}
 
 func (c *ToolboxNodeCompiler) Compile(node graph.Node, _ map[string]interface{}) (interface{}, error) {
 	cfg, ok := node.Config.(graph.ToolboxNodeConfig)
@@ -19,9 +35,28 @@ func (c *ToolboxNodeCompiler) Compile(node graph.Node, _ map[string]interface{})
 
 	var toolsets []tool.Toolset
 
-	// 1. MCP Servers
+	// 1. Built-in tools
+	if len(cfg.Tools) > 0 {
+		var builtins []tool.Tool
+		for _, toolID := range cfg.Tools {
+			switch toolID {
+			case "google_search":
+				builtins = append(builtins, geminitool.GoogleSearch{})
+			default:
+				return nil, fmt.Errorf("unsupported built-in tool: %s", toolID)
+			}
+		}
+
+		toolsets = append(toolsets, &staticToolset{
+			name:  "builtins",
+			tools: builtins,
+		})
+	}
+
+	// 2. MCP servers
 	for _, mcpCfg := range cfg.MCPServers {
 		cmd := exec.Command(mcpCfg.Command, mcpCfg.Args...)
+		cmd.Env = os.Environ()
 		// Set environment variables if provided
 		if len(mcpCfg.Env) > 0 {
 			for k, v := range mcpCfg.Env {
@@ -38,7 +73,7 @@ func (c *ToolboxNodeCompiler) Compile(node graph.Node, _ map[string]interface{})
 		toolsets = append(toolsets, mcpTools)
 	}
 
-	// 2. Custom Functions (Declarations only for now)
+	// 3. Custom Functions (Declarations only for now)
 	// In v0, we'll focus on MCP and Built-ins.
 
 	return toolsets, nil

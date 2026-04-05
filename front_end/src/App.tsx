@@ -14,11 +14,10 @@ import { LLMNode } from './components/nodes/LLMNode';
 import { ToolboxNode } from './components/nodes/ToolboxNode';
 import { OutputNode } from './components/nodes/OutputNode';
 import { IfElseNode } from './components/nodes/IfElseNode';
-import { WhileNode } from './components/nodes/WhileNode';
 import { SidePanel } from './components/SidePanel';
 import { LogPanel } from './components/LogPanel';
 import { Palette } from './components/Palette';
-import { saveGraph, executeGraph, loadGraphs, API_BASE } from './api/client';
+import { saveGraph, executeGraph, loadGraph, loadGraphs } from './api/client';
 import { extractDisplayContent, extractFinalResponse, isFinalAgentResponse } from './utils/execution';
 
 const nodeTypes = {
@@ -27,7 +26,6 @@ const nodeTypes = {
   toolbox: ToolboxNode,
   output_node: OutputNode,
   if_else_node: IfElseNode,
-  while_node: WhileNode,
 };
 
 const App: React.FC = () => {
@@ -48,6 +46,7 @@ const App: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([]);
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [finalResponse, setFinalResponse] = useState<string | null>(null);
+  const [executionInput, setExecutionInput] = useState('Hello, who are you?');
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -72,7 +71,9 @@ const App: React.FC = () => {
   );
 
   const handleSave = async () => {
+    setIsLogOpen(true);
     const graph = exportGraph();
+    addLog('info', `Saving graph '${graph.name}'...`);
     try {
         await saveGraph(graph);
         addLog('info', `Graph '${graph.name}' saved successfully.`);
@@ -82,18 +83,23 @@ const App: React.FC = () => {
   };
 
   const handleLoad = async () => {
+    setIsLogOpen(true);
+    addLog('info', 'Loading saved graphs...');
     try {
         const names = await loadGraphs();
         if (!names || names.length === 0) {
+            addLog('info', 'No saved graphs found.');
             alert("No saved graphs found.");
             return;
         }
         const selected = window.prompt(`Enter graph name to load:\nAvailable: ${names.join(', ')}`);
         if (selected) {
-            const resp = await fetch(`${API_BASE}/graphs/${selected}`);
-            const data = await resp.json();
+            addLog('info', `Loading graph '${selected}'...`);
+            const data = await loadGraph(selected);
             importGraph(data);
             addLog('info', `Graph '${selected}' loaded.`);
+        } else {
+            addLog('info', 'Load cancelled.');
         }
     } catch (e) {
         addLog('error', `Failed to load graphs: ${e}`);
@@ -112,12 +118,17 @@ const App: React.FC = () => {
   };
 
   const handleDeploy = async () => {
-    const userInput = window.prompt("Enter agent input:", "Hello, who are you?");
-    if (userInput === null) return;
+    const userInput = executionInput;
+    if (!userInput.trim()) {
+        setIsLogOpen(true);
+        addLog('error', 'Execution input is empty.');
+        return;
+    }
 
     setFinalResponse(null);
     setIsLogOpen(true);
     addLog('info', 'Starting execution...');
+    addLog('info', `Input: ${userInput}`);
     
     const graph = exportGraph();
     const outputKeys = graph.nodes
@@ -155,7 +166,17 @@ const App: React.FC = () => {
           <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center font-bold text-xs shadow-lg shadow-blue-900/20 text-white">V</div>
           <span className="font-bold tracking-tight text-white">Visual Agent <span className="text-gray-600 font-normal ml-1">IDE</span></span>
         </div>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-gray-950 border border-gray-800 w-56 xl:w-80">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500 shrink-0">Input</span>
+            <input
+              type="text"
+              value={executionInput}
+              onChange={(e) => setExecutionInput(e.target.value)}
+              placeholder="Enter agent input"
+              className="w-full bg-transparent text-sm text-gray-100 focus:outline-none placeholder:text-gray-600"
+            />
+          </div>
           <button 
             className="px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:bg-gray-700 transition-all active:scale-95"
             onClick={handleLoad}

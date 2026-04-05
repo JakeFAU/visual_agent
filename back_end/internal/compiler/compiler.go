@@ -8,6 +8,18 @@ import (
 	"google.golang.org/adk/tool"
 )
 
+func isToolboxEdge(edge graph.Edge) bool {
+	return edge.TargetPort == "in_toolbox" || edge.TargetPort == "toolbox_handle"
+}
+
+func isIfElseTrueEdge(edge graph.Edge) bool {
+	return edge.SourcePort == "message:true" || edge.SourcePort == "out_true"
+}
+
+func isIfElseFalseEdge(edge graph.Edge) bool {
+	return edge.SourcePort == "message:false" || edge.SourcePort == "out_false"
+}
+
 // NodeCompiler translates a specific graph node into its ADK representation
 // interface{} (any) allows nodes to return agents, toolsets, or other configs.
 type NodeCompiler interface {
@@ -44,9 +56,14 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 	outputMappings := make(map[string][]string)
 	toolsetMappings := make(map[string][]tool.Toolset)
 	toolboxResults := make(map[string][]tool.Toolset)
+	trueAgentMappings := make(map[string]string)
+	falseAgentMappings := make(map[string]string)
 	outputNodeKeys := make(map[string]string)
+	nodeByID := make(map[string]graph.Node, len(g.Nodes))
 
 	for _, node := range g.Nodes {
+		nodeByID[node.ID] = node
+
 		if node.Type != "output_node" {
 			continue
 		}
@@ -60,7 +77,7 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 	}
 
 	for _, edge := range g.Edges {
-		if edge.TargetPort == "in_toolbox" {
+		if isToolboxEdge(edge) {
 			continue
 		}
 
@@ -70,6 +87,29 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 		}
 
 		outputMappings[edge.Source] = append(outputMappings[edge.Source], outputKey)
+	}
+
+	for _, edge := range g.Edges {
+		if !isIfElseTrueEdge(edge) && !isIfElseFalseEdge(edge) {
+			continue
+		}
+
+		targetNode, ok := nodeByID[edge.Target]
+		if !ok {
+			return nil, fmt.Errorf("edge %s references unknown target node %s", edge.ID, edge.Target)
+		}
+
+		targetAgentName, ok := targetNode.AgentName()
+		if !ok {
+			return nil, fmt.Errorf("if_else edge %s targets non-execution node %s", edge.ID, edge.Target)
+		}
+
+		if isIfElseTrueEdge(edge) {
+			trueAgentMappings[edge.Source] = targetAgentName
+		}
+		if isIfElseFalseEdge(edge) {
+			falseAgentMappings[edge.Source] = targetAgentName
+		}
 	}
 
 	// 3. First Pass: Compile toolbox nodes
@@ -95,7 +135,7 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 
 	// 4. Map toolsets to LLM nodes
 	for _, edge := range g.Edges {
-		if edge.TargetPort == "in_toolbox" {
+		if isToolboxEdge(edge) {
 			if toolsets, ok := toolboxResults[edge.Source]; ok {
 				toolsetMappings[edge.Target] = append(toolsetMappings[edge.Target], toolsets...)
 				fmt.Printf("[DEBUG] Wired toolbox %s to node %s\n", edge.Source, edge.Target)
@@ -121,6 +161,8 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 		metadata := map[string]interface{}{
 			"output_keys": outputMappings[node.ID],
 			"toolsets":    toolsetMappings[node.ID],
+			"true_agent":  trueAgentMappings[node.ID],
+			"false_agent": falseAgentMappings[node.ID],
 		}
 
 		res, err := nc.Compile(node, metadata)

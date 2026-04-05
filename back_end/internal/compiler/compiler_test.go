@@ -9,6 +9,7 @@ import (
 	"github.com/JakeFAU/visual_agent/internal/graph"
 	"google.golang.org/adk/agent"
 	"google.golang.org/adk/model"
+	"google.golang.org/adk/tool"
 	"google.golang.org/genai"
 	"iter"
 )
@@ -32,9 +33,38 @@ type CaptureCompiler struct {
 	lastMetadata map[string]interface{}
 }
 
+type StubToolboxCompiler struct {
+	toolsets []tool.Toolset
+}
+
+type BranchCaptureCompiler struct {
+	lastMetadata map[string]interface{}
+}
+
 func (c *CaptureCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
 	c.lastMetadata = metadata
 	return agent.New(agent.Config{Name: node.ID})
+}
+
+func (c *StubToolboxCompiler) Compile(_ graph.Node, _ map[string]interface{}) (any, error) {
+	return c.toolsets, nil
+}
+
+func (c *BranchCaptureCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
+	c.lastMetadata = metadata
+	return agent.New(agent.Config{Name: node.ID})
+}
+
+type testToolset struct {
+	name string
+}
+
+func (t *testToolset) Name() string {
+	return t.name
+}
+
+func (t *testToolset) Tools(agent.ReadonlyContext) ([]tool.Tool, error) {
+	return nil, nil
 }
 
 func TestCompileSequential(t *testing.T) {
@@ -236,5 +266,212 @@ func TestCompileUsesOutputNodeKey(t *testing.T) {
 	want := []string{"result"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("output_keys mismatch: got %v want %v", got, want)
+	}
+}
+
+func TestCompileWiresToolboxHandleToLLMNode(t *testing.T) {
+	graphJSON := `{
+  "version": "1.0",
+  "name": "toolbox_wiring_workflow",
+  "nodes": [
+    {
+      "id": "toolbox-1",
+      "type": "toolbox",
+      "config": {
+        "tools": [],
+        "mcp_servers": [],
+        "custom_functions": []
+      }
+    },
+    {
+      "id": "llm-1",
+      "type": "llm_node",
+      "config": {
+        "name": "agent_1"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "toolbox-1",
+      "source_port": "toolbox_handle",
+      "target": "llm-1",
+      "target_port": "toolbox_handle",
+      "data_type": "toolbox_handle",
+      "edge_kind": "data_flow"
+    }
+  ]
+}`
+
+	var g graph.Graph
+	if err := json.Unmarshal([]byte(graphJSON), &g); err != nil {
+		t.Fatalf("Failed to unmarshal graph: %v", err)
+	}
+
+	c := New()
+	capture := &CaptureCompiler{}
+	c.Register("llm_node", capture)
+	c.Register("toolbox", &StubToolboxCompiler{
+		toolsets: []tool.Toolset{&testToolset{name: "stub-toolset"}},
+	})
+
+	compiled, err := c.Compile(g)
+	if err != nil {
+		t.Fatalf("Compilation failed: %v", err)
+	}
+
+	if compiled == nil {
+		t.Fatal("Expected compiled agent, got nil")
+	}
+
+	got, ok := capture.lastMetadata["toolsets"].([]tool.Toolset)
+	if !ok {
+		t.Fatalf("Expected toolsets metadata, got %#v", capture.lastMetadata["toolsets"])
+	}
+
+	if len(got) != 1 {
+		t.Fatalf("toolsets length mismatch: got %d want 1", len(got))
+	}
+
+	if got[0].Name() != "stub-toolset" {
+		t.Fatalf("toolset mismatch: got %q want %q", got[0].Name(), "stub-toolset")
+	}
+}
+
+func TestToolboxNodeCompilerBuildsGoogleSearchToolset(t *testing.T) {
+	node := graph.Node{
+		ID:   "toolbox-1",
+		Type: "toolbox",
+		Config: graph.ToolboxNodeConfig{
+			Tools:           []string{"google_search"},
+			MCPServers:      []graph.MCPServerConfig{},
+			CustomFunctions: []graph.CustomFunctionConfig{},
+		},
+	}
+
+	compiler := &ToolboxNodeCompiler{}
+	res, err := compiler.Compile(node, nil)
+	if err != nil {
+		t.Fatalf("Compilation failed: %v", err)
+	}
+
+	toolsets, ok := res.([]tool.Toolset)
+	if !ok {
+		t.Fatalf("Expected []tool.Toolset, got %#v", res)
+	}
+
+	if len(toolsets) != 1 {
+		t.Fatalf("toolsets length mismatch: got %d want 1", len(toolsets))
+	}
+
+	tools, err := toolsets[0].Tools(nil)
+	if err != nil {
+		t.Fatalf("Tools() failed: %v", err)
+	}
+
+	if len(tools) != 1 {
+		t.Fatalf("tools length mismatch: got %d want 1", len(tools))
+	}
+
+	if tools[0].Name() != "google_search" {
+		t.Fatalf("tool mismatch: got %q want %q", tools[0].Name(), "google_search")
+	}
+}
+
+func TestToolboxNodeCompilerRejectsUnsupportedBuiltInTool(t *testing.T) {
+	node := graph.Node{
+		ID:   "toolbox-1",
+		Type: "toolbox",
+		Config: graph.ToolboxNodeConfig{
+			Tools:           []string{"code_interpreter"},
+			MCPServers:      []graph.MCPServerConfig{},
+			CustomFunctions: []graph.CustomFunctionConfig{},
+		},
+	}
+
+	compiler := &ToolboxNodeCompiler{}
+	if _, err := compiler.Compile(node, nil); err == nil {
+		t.Fatal("Expected error for unsupported built-in tool, got nil")
+	}
+}
+
+func TestCompileIfElseWiresBranchTargets(t *testing.T) {
+	graphJSON := `{
+  "version": "1.0",
+  "name": "if_else_wiring",
+  "nodes": [
+    {
+      "id": "if-1",
+      "type": "if_else_node",
+      "config": {
+        "condition_language": "CEL",
+        "condition": "state.category == 'billing'"
+      }
+    },
+    {
+      "id": "llm-true",
+      "type": "llm_node",
+      "config": {
+        "name": "billing_agent",
+        "model": "gemini-2.0-flash",
+        "instruction": "billing",
+        "response_mode": "text"
+      }
+    },
+    {
+      "id": "llm-false",
+      "type": "llm_node",
+      "config": {
+        "name": "general_agent",
+        "model": "gemini-2.0-flash",
+        "instruction": "general",
+        "response_mode": "text"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "if-1",
+      "source_port": "message:true",
+      "target": "llm-true",
+      "target_port": "message"
+    },
+    {
+      "id": "e2",
+      "source": "if-1",
+      "source_port": "message:false",
+      "target": "llm-false",
+      "target_port": "message"
+    }
+  ]
+}`
+
+	var g graph.Graph
+	if err := json.Unmarshal([]byte(graphJSON), &g); err != nil {
+		t.Fatalf("Failed to unmarshal graph: %v", err)
+	}
+
+	c := New()
+	capture := &BranchCaptureCompiler{}
+	c.Register("if_else_node", capture)
+	c.Register("llm_node", &CaptureCompiler{})
+
+	compiled, err := c.Compile(g)
+	if err != nil {
+		t.Fatalf("Compilation failed: %v", err)
+	}
+
+	if compiled == nil {
+		t.Fatal("Expected compiled agent, got nil")
+	}
+
+	if got := capture.lastMetadata["true_agent"]; got != "billing_agent" {
+		t.Fatalf("true_agent mismatch: got %#v want %q", got, "billing_agent")
+	}
+
+	if got := capture.lastMetadata["false_agent"]; got != "general_agent" {
+		t.Fatalf("false_agent mismatch: got %#v want %q", got, "general_agent")
 	}
 }

@@ -45,6 +45,9 @@ func main() {
 			if err := json.Unmarshal(data, &g); err != nil {
 				return fmt.Errorf("failed to unmarshal JSON: %w", err)
 			}
+			if err := g.Validate(); err != nil {
+				return fmt.Errorf("invalid graph: %w", err)
+			}
 
 			c := compiler.New()
 			c.Register("llm_node", &compiler.LLMNodeCompiler{})
@@ -90,8 +93,8 @@ func main() {
 				return err
 			}
 			srv := server.New(s)
-			fmt.Println("Starting server on :8080...")
-			return srv.Run(":8080")
+			fmt.Printf("Starting server on %s...\n", cfg.ServerAddr)
+			return srv.Run(cfg.ServerAddr)
 		},
 	}
 
