@@ -1,0 +1,29 @@
+services:
+  backend:
+    build:
+      context: ./back_end
+      dockerfile: Dockerfile
+    environment:
+      VISUAL_AGENT_SERVER_ADDR: 0.0.0.0:8080
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      VISUAL_AGENT_RUNTIME_TYPE: ${VISUAL_AGENT_RUNTIME_TYPE:-local}
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-us-east1}
+    expose:
+      - "8080"
+    volumes:
+      - visual-agent-graphs:/app/data/graphs
+
+  frontend:
+    build:
+      context: ./front_end
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-/api}
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  visual-agent-graphs:

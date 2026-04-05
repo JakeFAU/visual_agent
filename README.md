@@ -13,13 +13,40 @@ Visual Agent follows a "vibe coding with tight contracts" philosophy:
 3.  **Back-End:** A Go-based compiler that translates the Graph JSON into optimized Google ADK agents.
 4.  **Execution:** Agents are executed via the ADK, targeting a local in-memory runtime by default and Vertex AI when configured.
 
-## Prerequisites
+## Quickstart With Docker
+
+### Prerequisites
+
+- Docker Engine with Docker Compose v2
+- For model-backed execution, set `GOOGLE_API_KEY` before starting the stack
+
+### 1. Configure model access
+
+For the Gemini Developer API:
+```bash
+export GOOGLE_API_KEY=your_api_key
+```
+
+### 2. Start the stack
+```bash
+docker compose up --build
+```
+
+Open `http://localhost:3000` in your browser.
+
+Notes:
+- The frontend proxies `/api` traffic to the backend container, so you only need one browser URL.
+- Saved graphs persist in the named Docker volume `visual-agent-graphs`.
+- The backend is not published directly to the host by default.
+- Graphs that rely on MCP servers spawning local host commands may need a custom backend image or additional container mounts.
+
+## Native Development
+
+### Prerequisites
 
 - **Node.js:** `^20.19.0` or `>=22.12.0` (for the front-end)
 - **Go:** `1.25+` (for the back-end)
 - **Model-backed execution:** either a `GOOGLE_API_KEY` for the Gemini Developer API, or Vertex AI access with [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc), `GOOGLE_CLOUD_PROJECT`, and an optional `GOOGLE_CLOUD_LOCATION`.
-
-## Quickstart
 
 ### 1. Start the Back-End API
 ```bash
@@ -34,7 +61,8 @@ cd front_end
 npm install
 npm run dev
 ```
-Open `http://localhost:5173` in your browser.
+Open `http://localhost:5173` in your browser. The Vite dev server proxies `/api` requests to `http://127.0.0.1:8080` by default.
+Set `VITE_DEV_API_PROXY_TARGET` if your API listens on a different address during development.
 
 ### 3. Configure model access
 
@@ -54,6 +82,7 @@ export GOOGLE_CLOUD_LOCATION=us-central1
 
 - Front-end checks: `cd front_end && npm run lint && npm run typecheck && npm run build`
 - Back-end checks: `cd back_end && go test ./... && go vet ./... && golangci-lint run ./...`
+- Docker quickstart: `docker compose up --build`
 - Public screenshots and longer-form project docs live in [`documents/`](documents/README.md).
 
 ## License & Community

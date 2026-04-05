@@ -1,4 +1,6 @@
-export const API_BASE = 'http://localhost:8080/api';
+const configuredAPIBase = import.meta.env.VITE_API_BASE?.trim();
+
+export const API_BASE = (configuredAPIBase && configuredAPIBase.length > 0 ? configuredAPIBase : '/api').replace(/\/$/, '');
 
 export const saveGraph = async (graph: any) => {
   const resp = await fetch(`${API_BASE}/graphs`, {
