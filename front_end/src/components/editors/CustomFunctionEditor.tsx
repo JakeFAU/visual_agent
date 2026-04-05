@@ -36,7 +36,7 @@ export const CustomFunctionEditor: React.FC<CustomFunctionEditorProps> = ({ func
       const parsed = JSON.parse(value);
       updateFunction(index, { parameters: parsed });
       setErrorIndex(null);
-    } catch (e) {
+    } catch {
       setErrorIndex(index);
     }
   };

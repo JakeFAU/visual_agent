@@ -47,6 +47,6 @@ back_end/data/graphs/*.json
 # Temporary Files
 tmp/
 .gemini/tmp/
-docs/
+/docs/
+/images/
 GEMINI.md
-images/
