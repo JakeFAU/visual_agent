@@ -1,35 +1,57 @@
 {
-  "name": "front_end",
+  "name": "visual-agent-frontend",
+  "private": true,
   "version": "1.0.0",
-  "description": "",
+  "description": "Frontend IDE for building, validating, and executing Visual Agent workflows.",
   "type": "module",
-  "main": "index.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "npm run typecheck && vite build",
+    "test": "npm run lint && npm run typecheck"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "keywords": [
+    "ai-agents",
+    "workflow-editor",
+    "reactflow",
+    "google-adk"
+  ],
+  "author": "Jacob D. Bourne",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JakeFAU/visual_agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/JakeFAU/visual_agent/issues"
+  },
+  "homepage": "https://github.com/JakeFAU/visual_agent#readme",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "dependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "reactflow": "^11.11.4",
     "tsx": "^4.21.0",
     "zod": "^3.25.76",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@types/node": "^25.5.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.4.18",
+    "eslint": "^9.39.4",
+    "globals": "^17.4.0",
     "lucide-react": "^1.7.0",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "typescript": "^6.0.2",
+    "typescript-eslint": "^8.58.0",
     "vite": "^8.0.3"
   }
 }

@@ -7,7 +7,7 @@ import { CustomFunctionEditor } from './editors/CustomFunctionEditor';
 import { SchemaFieldBuilder } from './editors/SchemaFieldBuilder';
 
 export const SidePanel: React.FC = () => {
-  const { selectedNodeId, nodes, updateNodeConfig, name: graphName } = useGraphStore();
+  const { selectedNodeId, nodes, updateNodeConfig } = useGraphStore();
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
 
   if (!selectedNode) {

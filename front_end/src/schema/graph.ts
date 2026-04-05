@@ -49,11 +49,6 @@ const IfElseNodeConfigSchema = z.object({
   condition: z.string(),
 });
 
-const WhileNodeConfigSchema = z.object({
-  condition: z.string(),
-  max_iterations: z.number().default(10),
-});
-
 const NodeSchema = z.discriminatedUnion("type", [
   z.object({
     id: z.string(),
@@ -113,4 +108,3 @@ export type LLMNodeConfig = z.infer<typeof LLMNodeConfigSchema>;
 export type OutputNodeConfig = z.infer<typeof OutputNodeConfigSchema>;
 export type ToolboxNodeConfig = z.infer<typeof ToolboxNodeConfigSchema>;
 export type IfElseNodeConfig = z.infer<typeof IfElseNodeConfigSchema>;
-export type WhileNodeConfig = z.infer<typeof WhileNodeConfigSchema>;
