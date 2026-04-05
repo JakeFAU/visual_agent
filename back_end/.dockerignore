@@ -1,0 +1,14 @@
+bin
+dist
+vendor
+visual-agent
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+data/graphs/*.json
+.git
+.vscode
