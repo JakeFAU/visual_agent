@@ -21,10 +21,14 @@ type BaseRuntime struct {
 	sessionService session.Service
 }
 
+// newUserMessage normalizes CLI and HTTP input into the ADK content shape
+// expected by runner.Run.
 func newUserMessage(input string) *genai.Content {
 	return genai.NewContentFromText(input, genai.RoleUser)
 }
 
+// Execute runs a compiled agent against the configured session service and
+// returns the ADK event stream unchanged.
 func (r *BaseRuntime) Execute(ctx context.Context, a agent.Agent, input string) iter.Seq2[*session.Event, error] {
 	adkRunner, err := runner.New(runner.Config{
 		AppName:           "VisualAgent",
@@ -41,7 +45,7 @@ func (r *BaseRuntime) Execute(ctx context.Context, a agent.Agent, input string) 
 	return adkRunner.Run(ctx, "default-user", "default-session", newUserMessage(input), agent.RunConfig{})
 }
 
-// NewVertexRuntime returns a runtime powered by Vertex AI
+// NewVertexRuntime returns a runtime powered by Vertex AI session storage.
 func NewVertexRuntime(ctx context.Context, projectID, location string) (AgentRuntime, error) {
 	svc, err := vertexai.NewSessionService(ctx, vertexai.VertexAIServiceConfig{
 		ProjectID: projectID,
@@ -53,7 +57,8 @@ func NewVertexRuntime(ctx context.Context, projectID, location string) (AgentRun
 	return &BaseRuntime{sessionService: svc}, nil
 }
 
-// NewLocalRuntime returns an in-memory runtime for testing
+// NewLocalRuntime returns an in-memory runtime suitable for local development
+// and tests.
 func NewLocalRuntime() AgentRuntime {
 	return &BaseRuntime{sessionService: session.InMemoryService()}
 }

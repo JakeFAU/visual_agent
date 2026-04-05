@@ -13,6 +13,8 @@ type Storage struct {
 	dataDir string
 }
 
+// New initializes a graph storage rooted at dir, creating the directory if it
+// does not already exist.
 func New(dir string) (*Storage, error) {
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
@@ -24,6 +26,7 @@ func New(dir string) (*Storage, error) {
 	return &Storage{dataDir: absDir}, nil
 }
 
+// Save writes a graph as pretty-printed JSON under its graph name.
 func (s *Storage) Save(g graph.Graph) error {
 	path, err := s.graphFilePath(g.Name)
 	if err != nil {
@@ -36,6 +39,7 @@ func (s *Storage) Save(g graph.Graph) error {
 	return os.WriteFile(path, data, 0644)
 }
 
+// Load reads a graph document by name from disk.
 func (s *Storage) Load(name string) (*graph.Graph, error) {
 	path, err := s.graphFilePath(name)
 	if err != nil {
@@ -52,6 +56,7 @@ func (s *Storage) Load(name string) (*graph.Graph, error) {
 	return &g, nil
 }
 
+// List returns all stored graph names without their .json extension.
 func (s *Storage) List() ([]string, error) {
 	files, err := os.ReadDir(s.dataDir)
 	if err != nil {
@@ -66,6 +71,8 @@ func (s *Storage) List() ([]string, error) {
 	return names, nil
 }
 
+// graphFilePath converts a graph name into a safe path rooted inside the
+// storage directory.
 func (s *Storage) graphFilePath(name string) (string, error) {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {

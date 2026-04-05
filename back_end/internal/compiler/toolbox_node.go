@@ -14,6 +14,8 @@ import (
 
 type ToolboxNodeCompiler struct{}
 
+// staticToolset adapts an in-memory slice of tools to the ADK Toolset
+// interface.
 type staticToolset struct {
 	name  string
 	tools []tool.Tool
@@ -23,10 +25,14 @@ func (s *staticToolset) Name() string {
 	return s.name
 }
 
+// Tools satisfies tool.Toolset for built-ins whose tool list is known at
+// compile time.
 func (s *staticToolset) Tools(agent.ReadonlyContext) ([]tool.Tool, error) {
 	return s.tools, nil
 }
 
+// Compile resolves built-in tools and external MCP servers referenced by a
+// toolbox node into ADK toolsets.
 func (c *ToolboxNodeCompiler) Compile(node graph.Node, _ map[string]interface{}) (interface{}, error) {
 	cfg, ok := node.Config.(graph.ToolboxNodeConfig)
 	if !ok {
@@ -53,7 +59,8 @@ func (c *ToolboxNodeCompiler) Compile(node graph.Node, _ map[string]interface{})
 		})
 	}
 
-	// 2. MCP servers
+	// MCP toolsets are command-backed, so each declaration spawns a local
+	// subprocess when the toolbox is compiled.
 	for _, mcpCfg := range cfg.MCPServers {
 		cmd := exec.Command(mcpCfg.Command, mcpCfg.Args...)
 		cmd.Env = os.Environ()

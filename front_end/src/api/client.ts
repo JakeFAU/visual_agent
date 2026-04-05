@@ -1,7 +1,10 @@
+// API_BASE defaults to a same-origin /api prefix so the browser can work both
+// behind the Docker nginx reverse proxy and behind the Vite dev proxy.
 const configuredAPIBase = import.meta.env.VITE_API_BASE?.trim();
 
 export const API_BASE = (configuredAPIBase && configuredAPIBase.length > 0 ? configuredAPIBase : '/api').replace(/\/$/, '');
 
+// saveGraph persists the currently open graph document to the backend.
 export const saveGraph = async (graph: any) => {
   const resp = await fetch(`${API_BASE}/graphs`, {
     method: 'POST',
@@ -14,9 +17,10 @@ export const saveGraph = async (graph: any) => {
     throw new Error(error?.error || 'Failed to save graph');
   }
 
-  return resp.json();
+	return resp.json();
 };
 
+// loadGraphs retrieves the names of saved graphs so the UI can prompt the user.
 export const loadGraphs = async () => {
   const resp = await fetch(`${API_BASE}/graphs`);
 
@@ -25,9 +29,10 @@ export const loadGraphs = async () => {
     throw new Error(error?.error || 'Failed to load graphs');
   }
 
-  return resp.json();
+	return resp.json();
 };
 
+// loadGraph fetches a single graph document by its saved name.
 export const loadGraph = async (name: string) => {
   const resp = await fetch(`${API_BASE}/graphs/${encodeURIComponent(name)}`);
 
@@ -36,9 +41,11 @@ export const loadGraph = async (name: string) => {
     throw new Error(error?.error || `Failed to load graph '${name}'`);
   }
 
-  return resp.json();
+	return resp.json();
 };
 
+// executeGraph starts workflow execution and forwards the backend's SSE event
+// stream to the supplied callback one event at a time.
 export const executeGraph = async (graph: any, input: string, onEvent: (ev: { type: string, content: any, author?: string }) => void) => {
   console.log("[DEBUG] Starting executeGraph fetch...");
   const response = await fetch(`${API_BASE}/execute`, {
@@ -68,7 +75,8 @@ export const executeGraph = async (graph: any, input: string, onEvent: (ev: { ty
     console.log("[DEBUG] SSE Raw Line:", trimmed);
     if (trimmed.startsWith('data:')) {
         try {
-            // Find the first colon and take everything after it
+            // SSE frames arrive as "data: <json>", so only the payload after the
+            // first colon should be parsed.
             const jsonStr = trimmed.substring(trimmed.indexOf(':') + 1).trim();
             if (jsonStr) {
                 const data = JSON.parse(jsonStr);
@@ -95,7 +103,8 @@ export const executeGraph = async (graph: any, input: string, onEvent: (ev: { ty
     buffer += chunk;
     
     const lines = buffer.split('\n');
-    // Keep the last partial line
+    // Keep the last partial line so JSON frames split across chunks can be
+    // reassembled on the next read.
     buffer = lines.pop() || '';
 
     lines.forEach(processLine);

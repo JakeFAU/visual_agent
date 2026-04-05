@@ -11,6 +11,11 @@ var supportedBuiltInTools = map[string]struct{}{
 	"google_search": {},
 }
 
+// Validate enforces the backend-supported subset of the graph contract.
+//
+// This is intentionally stricter than "the JSON parsed successfully": it
+// checks node uniqueness, edge references, reserved names, and control-flow
+// wiring so invalid workflows fail early before compilation or execution.
 func (g Graph) Validate() error {
 	if g.Version != SupportedGraphVersion {
 		return fmt.Errorf("unsupported graph version %q", g.Version)
@@ -97,6 +102,7 @@ func (g Graph) Validate() error {
 	return nil
 }
 
+// Validate checks a node's configuration according to its concrete type.
 func (n Node) Validate() error {
 	switch cfg := n.Config.(type) {
 	case InputNodeConfig:

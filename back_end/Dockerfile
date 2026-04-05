@@ -1,3 +1,4 @@
+# Build a small static binary first so the runtime image can stay minimal.
 FROM golang:1.25-bookworm AS build
 
 WORKDIR /src
@@ -9,6 +10,8 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/visual-agent ./cmd/visual-agent
 
+# The runtime image only needs CA certificates plus the compiled binary and a
+# writable directory for persisted graph JSON files.
 FROM debian:bookworm-slim
 
 RUN apt-get update \

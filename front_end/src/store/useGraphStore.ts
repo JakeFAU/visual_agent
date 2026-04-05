@@ -39,6 +39,9 @@ export interface GraphState {
   validateGraph: () => boolean;
 }
 
+// useGraphStore is the single source of truth for the canvas, serialized graph
+// contract, and lightweight editor state such as selection and validation
+// errors.
 export const useGraphStore = create<GraphState>((set, get) => ({
   nodes: [],
   edges: [],
@@ -69,7 +72,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   onConnect: (connection: Connection) => {
-    // Validate types before connecting (split by : to handle true/false branches)
+    // Ports encode a logical data type prefix such as "message" or "logic".
+    // For branch handles the suffix after ":" identifies the branch name, so
+    // only the prefix participates in compatibility checks.
     const sourceType = connection.sourceHandle?.split(':')[0];
     const targetType = connection.targetHandle?.split(':')[0];
 
@@ -96,6 +101,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const id = `${type}-${Date.now()}`;
     let config: any = {};
 
+    // New nodes start with contract-valid defaults so the canvas can emit a
+    // valid graph as soon as possible after a drag-and-drop action.
     switch (type) {
       case 'input_node':
         config = { name: 'user_input', description: 'The user input' };
@@ -138,6 +145,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   exportGraph: () => {
     const { nodes, edges, version, name } = get();
     
+    // React Flow node metadata is richer than the persisted contract, so export
+    // strips the canvas representation down to the JSON document shared with
+    // the backend.
     const contractNodes: ContractNode[] = nodes.map(node => ({
       id: node.id,
       type: node.type as any,
@@ -167,6 +177,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     try {
       const validated = GraphSchema.parse(data);
       
+      // Import performs the inverse of exportGraph: take a contract document and
+      // inflate it back into the subset of React Flow fields the editor needs.
       const rfNodes: Node[] = validated.nodes.map(node => ({
         id: node.id,
         type: node.type,
@@ -198,6 +210,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   validateGraph: () => {
+    // Frontend validation catches schema drift early before a graph is sent to
+    // the backend, while the backend still remains the source of truth for
+    // runtime-supported behavior.
     const graph = get().exportGraph();
     const result = GraphSchema.safeParse(graph);
     if (!result.success) {
