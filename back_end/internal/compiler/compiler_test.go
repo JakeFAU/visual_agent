@@ -46,7 +46,7 @@ func (c *CaptureCompiler) Compile(node graph.Node, metadata map[string]interface
 	return agent.New(agent.Config{Name: node.ID})
 }
 
-func (c *StubToolboxCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
+func (c *StubToolboxCompiler) Compile(_ graph.Node, _ map[string]interface{}) (any, error) {
 	return c.toolsets, nil
 }
 
