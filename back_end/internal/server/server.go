@@ -3,9 +3,9 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"time"
 
 	"github.com/JakeFAU/visual_agent/internal/compiler"
@@ -152,32 +152,51 @@ func (s *Server) Execute(c *gin.Context) {
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no") // Prevent proxy buffering (Nginx)
+	c.Status(http.StatusOK)
+	c.Writer.WriteHeaderNow()
+	writeSSEComment(c, "stream-open")
 
-	c.Stream(func(_ io.Writer) bool {
-		fmt.Println("[DEBUG] Entering execution loop")
-		for event, err := range rt.Execute(c.Request.Context(), compiled, req.Input) {
-			if err != nil {
-				fmt.Printf("[DEBUG] Execution error: %v\n", err)
-				data, _ := json.Marshal(gin.H{"type": "error", "content": err.Error()})
-				fmt.Fprintf(c.Writer, "data: %s\n\n", string(data))
-				c.Writer.Flush()
-				return false
-			}
-			if event != nil {
-				fmt.Printf("[DEBUG] Sending event from author: %s\n", event.Author)
-				data, _ := json.Marshal(gin.H{
-					"type":    "agent_event",
-					"content": event,
-					"author":  event.Author,
-				})
-				fmt.Fprintf(c.Writer, "data: %s\n\n", string(data))
-				c.Writer.Flush()
-			}
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("[DEBUG] Execution panic: %v\n%s\n", r, debug.Stack())
+			writeSSE(c, gin.H{
+				"type":    "error",
+				"content": fmt.Sprintf("execution panic: %v", r),
+			})
 		}
-		fmt.Println("[DEBUG] Execution loop finished, sending done")
-		data, _ := json.Marshal(gin.H{"type": "done", "content": "execution complete"})
-		fmt.Fprintf(c.Writer, "data: %s\n\n", string(data))
-		c.Writer.Flush()
-		return false
-	})
+	}()
+
+	fmt.Println("[DEBUG] Entering execution loop")
+	for event, err := range rt.Execute(c.Request.Context(), compiled, req.Input) {
+		if err != nil {
+			fmt.Printf("[DEBUG] Execution error: %v\n", err)
+			writeSSE(c, gin.H{"type": "error", "content": err.Error()})
+			return
+		}
+		if event != nil {
+			fmt.Printf("[DEBUG] Sending event from author: %s\n", event.Author)
+			writeSSE(c, gin.H{
+				"type":    "agent_event",
+				"content": event,
+				"author":  event.Author,
+			})
+		}
+	}
+	fmt.Println("[DEBUG] Execution loop finished, sending done")
+	writeSSE(c, gin.H{"type": "done", "content": "execution complete"})
+}
+
+func writeSSE(c *gin.Context, payload any) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		fmt.Printf("[DEBUG] Failed to marshal SSE payload: %v\n", err)
+		return
+	}
+	fmt.Fprintf(c.Writer, "data: %s\n\n", string(data))
+	c.Writer.Flush()
+}
+
+func writeSSEComment(c *gin.Context, comment string) {
+	fmt.Fprintf(c.Writer, ": %s\n\n", comment)
+	c.Writer.Flush()
 }
