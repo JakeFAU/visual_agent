@@ -3,10 +3,13 @@ package compiler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 	"testing"
+
+	"iter"
 
 	"github.com/JakeFAU/visual_agent/internal/graph"
 	"github.com/JakeFAU/visual_agent/internal/runtime"
@@ -15,7 +18,6 @@ import (
 	"google.golang.org/adk/session"
 	"google.golang.org/adk/tool"
 	"google.golang.org/genai"
-	"iter"
 )
 
 // MockModel satisfies the model.LLM interface for testing.
