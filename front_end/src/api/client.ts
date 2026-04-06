@@ -100,7 +100,14 @@ export const executeGraph = async (
   };
 
   while (true) {
-    const { value, done } = await reader.read();
+    let value: Uint8Array | undefined;
+    let done = false;
+    try {
+      ({ value, done } = await reader.read());
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      throw new Error(`Execution stream closed unexpectedly: ${message}`);
+    }
     if (done) {
         console.log("[DEBUG] Stream reader done. Remaining buffer:", buffer);
         if (buffer) {

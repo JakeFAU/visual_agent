@@ -117,12 +117,25 @@ type testToolset struct {
 	name string
 }
 
+type errToolset struct {
+	name string
+	err  error
+}
+
 func (t *testToolset) Name() string {
 	return t.name
 }
 
 func (t *testToolset) Tools(agent.ReadonlyContext) ([]tool.Tool, error) {
 	return nil, nil
+}
+
+func (t *errToolset) Name() string {
+	return t.name
+}
+
+func (t *errToolset) Tools(agent.ReadonlyContext) ([]tool.Tool, error) {
+	return nil, t.err
 }
 
 func TestCompileSequential(t *testing.T) {
@@ -679,6 +692,57 @@ func TestToolboxNodeCompilerRejectsUnsupportedBuiltInTool(t *testing.T) {
 	compiler := &ToolboxNodeCompiler{}
 	if _, err := compiler.Compile(node, nil); err == nil {
 		t.Fatal("Expected error for unsupported built-in tool, got nil")
+	}
+}
+
+func TestAnnotatedMCPToolsetIncludesStderrInErrors(t *testing.T) {
+	stderrTail := newStderrTailBuffer(1024)
+	_, _ = stderrTail.Write([]byte("Error accessing directory /missing: ENOENT"))
+
+	toolset := &annotatedMCPToolset{
+		inner: &errToolset{
+			name: "mcp_tool_set",
+			err:  errors.New("failed to list MCP tools: failed to init MCP session: calling \"initialize\": EOF"),
+		},
+		serverName: "filesystem",
+		command:    "npx",
+		args:       []string{"-y", "@modelcontextprotocol/server-filesystem", "/missing"},
+		stderrTail: stderrTail,
+	}
+
+	_, err := toolset.Tools(nil)
+	if err == nil {
+		t.Fatal("Expected toolset error, got nil")
+	}
+
+	errText := err.Error()
+	if !strings.Contains(errText, `mcp server "filesystem" command: npx -y @modelcontextprotocol/server-filesystem /missing`) {
+		t.Fatalf("expected command details in error, got %q", errText)
+	}
+	if !strings.Contains(errText, "Error accessing directory /missing: ENOENT") {
+		t.Fatalf("expected stderr details in error, got %q", errText)
+	}
+}
+
+func TestToolboxNodeCompilerRejectsMissingMCPCommand(t *testing.T) {
+	node := graph.Node{
+		ID:   "toolbox-1",
+		Type: "toolbox",
+		Config: graph.ToolboxNodeConfig{
+			MCPServers: []graph.MCPServerConfig{{
+				Name:    "missing",
+				Command: "definitely-not-a-real-command",
+			}},
+		},
+	}
+
+	compiler := &ToolboxNodeCompiler{}
+	_, err := compiler.Compile(node, nil)
+	if err == nil {
+		t.Fatal("Expected missing command error, got nil")
+	}
+	if !strings.Contains(err.Error(), `mcp server missing command "definitely-not-a-real-command" is not available`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
