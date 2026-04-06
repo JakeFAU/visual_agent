@@ -25,8 +25,8 @@ type LLMNodeCompiler struct {
 
 // Compile builds an ADK llmagent from the graph contract and compiler metadata.
 //
-// Metadata currently carries output-key wiring and any toolsets sourced from
-// connected toolbox nodes.
+// Metadata currently carries the node's internal state key, public output-key
+// aliases, and any toolsets sourced from connected toolbox nodes.
 func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
 	cfg, ok := node.Config.(graph.LLMNodeConfig)
 	if !ok {
@@ -84,11 +84,10 @@ func (c *LLMNodeCompiler) Compile(node graph.Node, metadata map[string]interface
 		llmCfg.OutputSchema = &schema
 	}
 
-	// Output nodes are represented as state keys, so the compiler passes the
-	// resolved key name through metadata instead of creating a standalone ADK
-	// output agent.
-	if keys, ok := metadata["output_keys"].([]string); ok && len(keys) > 0 {
-		llmCfg.OutputKey = keys[0]
+	if stateKey, ok := metadata["state_key"].(string); ok && stateKey != "" {
+		llmCfg.OutputKey = stateKey
+	} else {
+		llmCfg.OutputKey = cfg.Name
 	}
 
 	// Toolsets are compiled separately because a single toolbox node may fan out

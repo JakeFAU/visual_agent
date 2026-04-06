@@ -8,6 +8,14 @@ func TestGraphValidateAcceptsSupportedGraph(t *testing.T) {
 		Name:    "Valid Graph",
 		Nodes: []Node{
 			{
+				ID:   "input-1",
+				Type: "input_node",
+				Config: InputNodeConfig{
+					Name:        "user_input",
+					Description: "User input",
+				},
+			},
+			{
 				ID:   "if-1",
 				Type: "if_else_node",
 				Config: IfElseNodeConfig{
@@ -37,6 +45,7 @@ func TestGraphValidateAcceptsSupportedGraph(t *testing.T) {
 			},
 		},
 		Edges: []Edge{
+			{ID: "input", Source: "input-1", SourcePort: "message", Target: "if-1", TargetPort: "message"},
 			{ID: "e1", Source: "if-1", SourcePort: "message:true", Target: "llm-true", TargetPort: "message"},
 			{ID: "e2", Source: "if-1", SourcePort: "message:false", Target: "llm-false", TargetPort: "message"},
 		},
@@ -48,22 +57,14 @@ func TestGraphValidateAcceptsSupportedGraph(t *testing.T) {
 }
 
 func TestGraphValidateRejectsJSONPathConditions(t *testing.T) {
-	g := Graph{
-		Version: SupportedGraphVersion,
-		Name:    "Invalid IfElse",
-		Nodes: []Node{
-			{
-				ID:   "if-1",
-				Type: "if_else_node",
-				Config: IfElseNodeConfig{
-					ConditionLanguage: "JSONPath",
-					Condition:         "$.category == 'billing'",
-				},
-			},
+	if err := (Node{
+		ID:   "if-1",
+		Type: "if_else_node",
+		Config: IfElseNodeConfig{
+			ConditionLanguage: "JSONPath",
+			Condition:         "$.category == 'billing'",
 		},
-	}
-
-	if err := g.Validate(); err == nil {
+	}).Validate(); err == nil {
 		t.Fatal("expected JSONPath validation error, got nil")
 	}
 }
@@ -139,5 +140,127 @@ func TestGraphValidateRejectsDuplicateAgentNames(t *testing.T) {
 
 	if err := g.Validate(); err == nil {
 		t.Fatal("expected duplicate agent name validation error, got nil")
+	}
+}
+
+func TestGraphValidateAcceptsReachableControlLoop(t *testing.T) {
+	g := Graph{
+		Version: SupportedGraphVersion,
+		Name:    "Retry Loop",
+		Nodes: []Node{
+			{
+				ID:   "input-1",
+				Type: "input_node",
+				Config: InputNodeConfig{
+					Name:        "user_input",
+					Description: "User input",
+				},
+			},
+			{
+				ID:   "analyze",
+				Type: "llm_node",
+				Config: LLMNodeConfig{
+					Name:         "analyze",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "Analyze failures",
+					ResponseMode: "json",
+				},
+			},
+			{
+				ID:   "gate",
+				Type: "if_else_node",
+				Config: IfElseNodeConfig{
+					ConditionLanguage: "CEL",
+					Condition:         `state.analyze.status == "pass"`,
+				},
+			},
+			{
+				ID:   "retry",
+				Type: "llm_node",
+				Config: LLMNodeConfig{
+					Name:         "retry",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "Try again",
+					ResponseMode: "text",
+				},
+			},
+			{
+				ID:   "done",
+				Type: "llm_node",
+				Config: LLMNodeConfig{
+					Name:         "done",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "Return the final result",
+					ResponseMode: "text",
+				},
+			},
+		},
+		Edges: []Edge{
+			{ID: "e-input", Source: "input-1", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+			{ID: "e-analyze-gate", Source: "analyze", SourcePort: "message", Target: "gate", TargetPort: "message"},
+			{ID: "e-gate-true", Source: "gate", SourcePort: "message:true", Target: "done", TargetPort: "message"},
+			{ID: "e-gate-false", Source: "gate", SourcePort: "message:false", Target: "retry", TargetPort: "message"},
+			{ID: "e-retry-loop", Source: "retry", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+		},
+	}
+
+	if err := g.Validate(); err != nil {
+		t.Fatalf("expected loop graph to validate, got %v", err)
+	}
+}
+
+func TestGraphValidateRejectsMultipleExecutionSuccessors(t *testing.T) {
+	g := Graph{
+		Version: SupportedGraphVersion,
+		Name:    "Forked LLM",
+		Nodes: []Node{
+			{
+				ID:   "input-1",
+				Type: "input_node",
+				Config: InputNodeConfig{
+					Name:        "user_input",
+					Description: "User input",
+				},
+			},
+			{
+				ID:   "llm-1",
+				Type: "llm_node",
+				Config: LLMNodeConfig{
+					Name:         "router",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "Route",
+					ResponseMode: "text",
+				},
+			},
+			{
+				ID:   "llm-2",
+				Type: "llm_node",
+				Config: LLMNodeConfig{
+					Name:         "a",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "A",
+					ResponseMode: "text",
+				},
+			},
+			{
+				ID:   "llm-3",
+				Type: "llm_node",
+				Config: LLMNodeConfig{
+					Name:         "b",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "B",
+					ResponseMode: "text",
+				},
+			},
+		},
+		Edges: []Edge{
+			{ID: "e-input", Source: "input-1", SourcePort: "message", Target: "llm-1", TargetPort: "message"},
+			{ID: "e-a", Source: "llm-1", SourcePort: "message", Target: "llm-2", TargetPort: "message"},
+			{ID: "e-b", Source: "llm-1", SourcePort: "message", Target: "llm-3", TargetPort: "message"},
+		},
+	}
+
+	if err := g.Validate(); err == nil {
+		t.Fatal("expected multiple-successor validation error, got nil")
 	}
 }

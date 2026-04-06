@@ -30,6 +30,9 @@ func (g Graph) Validate() error {
 
 	nodeIDs := make(map[string]Node, len(g.Nodes))
 	agentNames := make(map[string]string)
+	incoming := make(map[string][]Edge, len(g.Nodes))
+	outgoing := make(map[string][]Edge, len(g.Nodes))
+	var inputNodeID string
 
 	for _, node := range g.Nodes {
 		if strings.TrimSpace(node.ID) == "" {
@@ -50,6 +53,13 @@ func (g Graph) Validate() error {
 			}
 			agentNames[name] = node.ID
 		}
+
+		if node.Type == "input_node" {
+			if inputNodeID != "" {
+				return fmt.Errorf("graph must define exactly one input_node")
+			}
+			inputNodeID = node.ID
+		}
 	}
 
 	for _, edge := range g.Edges {
@@ -68,34 +78,103 @@ func (g Graph) Validate() error {
 		if strings.TrimSpace(edge.TargetPort) == "" {
 			return fmt.Errorf("edge %q target_port cannot be empty", edge.ID)
 		}
+
+		outgoing[edge.Source] = append(outgoing[edge.Source], edge)
+		incoming[edge.Target] = append(incoming[edge.Target], edge)
+	}
+
+	if inputNodeID == "" {
+		return fmt.Errorf("graph must define exactly one input_node")
 	}
 
 	for _, node := range g.Nodes {
-		if node.Type != "if_else_node" {
+		switch node.Type {
+		case "input_node":
+			controlEdges := 0
+			for _, edge := range outgoing[node.ID] {
+				target := nodeIDs[edge.Target]
+				if isToolboxConnection(edge, node, target) {
+					return fmt.Errorf("input node %q cannot connect to toolbox handles", node.ID)
+				}
+				if !isExecutionNode(target) {
+					return fmt.Errorf("input node %q must target an execution node", node.ID)
+				}
+				controlEdges++
+			}
+			if controlEdges != 1 {
+				return fmt.Errorf("input node %q must define exactly one outgoing execution edge", node.ID)
+			}
+		case "llm_node":
+			successorCount := 0
+			for _, edge := range outgoing[node.ID] {
+				target := nodeIDs[edge.Target]
+				switch {
+				case target.Type == "output_node":
+					continue
+				case isToolboxConnection(edge, node, target):
+					return fmt.Errorf("llm node %q cannot originate toolbox edges", node.ID)
+				case isExecutionNode(target):
+					successorCount++
+				default:
+					return fmt.Errorf("llm node %q cannot target node %q of type %q", node.ID, target.ID, target.Type)
+				}
+			}
+			if successorCount > 1 {
+				return fmt.Errorf("llm node %q must define at most one execution successor", node.ID)
+			}
+		case "if_else_node":
+			var trueCount, falseCount int
+			for _, edge := range outgoing[node.ID] {
+				target := nodeIDs[edge.Target]
+				switch edge.SourcePort {
+				case "message:true", "out_true":
+					if !isExecutionNode(target) {
+						return fmt.Errorf("if_else node %q true branch must target an execution node", node.ID)
+					}
+					trueCount++
+				case "message:false", "out_false":
+					if !isExecutionNode(target) {
+						return fmt.Errorf("if_else node %q false branch must target an execution node", node.ID)
+					}
+					falseCount++
+				default:
+					return fmt.Errorf("if_else node %q only supports true/false branch outputs", node.ID)
+				}
+			}
+			if trueCount != 1 || falseCount != 1 {
+				return fmt.Errorf("if_else node %q must define exactly one true branch and one false branch", node.ID)
+			}
+		case "output_node":
+			if len(outgoing[node.ID]) != 0 {
+				return fmt.Errorf("output node %q cannot have outgoing edges", node.ID)
+			}
+			if len(incoming[node.ID]) != 1 {
+				return fmt.Errorf("output node %q must have exactly one incoming edge", node.ID)
+			}
+			source := nodeIDs[incoming[node.ID][0].Source]
+			if source.Type != "llm_node" {
+				return fmt.Errorf("output node %q must be driven by an llm_node", node.ID)
+			}
+		case "toolbox":
+			if len(incoming[node.ID]) != 0 {
+				return fmt.Errorf("toolbox node %q cannot have incoming edges", node.ID)
+			}
+			for _, edge := range outgoing[node.ID] {
+				target := nodeIDs[edge.Target]
+				if !isToolboxConnection(edge, node, target) {
+					return fmt.Errorf("toolbox node %q can only connect to llm toolbox handles", node.ID)
+				}
+			}
+		}
+	}
+
+	reachable := walkReachableExecutionNodes(inputNodeID, nodeIDs, outgoing)
+	for _, node := range g.Nodes {
+		if !isExecutionNode(node) {
 			continue
 		}
-
-		var trueCount, falseCount int
-		for _, edge := range g.Edges {
-			if edge.Source != node.ID {
-				continue
-			}
-			switch edge.SourcePort {
-			case "message:true", "out_true":
-				if _, ok := nodeIDs[edge.Target].AgentName(); !ok {
-					return fmt.Errorf("if_else node %q true branch must target an execution node", node.ID)
-				}
-				trueCount++
-			case "message:false", "out_false":
-				if _, ok := nodeIDs[edge.Target].AgentName(); !ok {
-					return fmt.Errorf("if_else node %q false branch must target an execution node", node.ID)
-				}
-				falseCount++
-			}
-		}
-
-		if trueCount != 1 || falseCount != 1 {
-			return fmt.Errorf("if_else node %q must define exactly one true branch and one false branch", node.ID)
+		if !reachable[node.ID] {
+			return fmt.Errorf("execution node %q is unreachable from the input node", node.ID)
 		}
 	}
 
@@ -165,4 +244,42 @@ func (n Node) Validate() error {
 	}
 
 	return nil
+}
+
+func isExecutionNode(node Node) bool {
+	_, ok := node.AgentName()
+	return ok
+}
+
+func isToolboxConnection(edge Edge, source, target Node) bool {
+	if source.Type != "toolbox" {
+		return false
+	}
+	return (edge.TargetPort == "toolbox_handle" || edge.TargetPort == "in_toolbox") && target.Type == "llm_node"
+}
+
+func walkReachableExecutionNodes(inputNodeID string, nodeIDs map[string]Node, outgoing map[string][]Edge) map[string]bool {
+	reachable := make(map[string]bool)
+	queue := []string{inputNodeID}
+	seen := map[string]bool{inputNodeID: true}
+
+	for len(queue) > 0 {
+		nodeID := queue[0]
+		queue = queue[1:]
+
+		for _, edge := range outgoing[nodeID] {
+			target := nodeIDs[edge.Target]
+			if target.Type == "output_node" || isToolboxConnection(edge, nodeIDs[nodeID], target) {
+				continue
+			}
+			if !isExecutionNode(target) || seen[target.ID] {
+				continue
+			}
+			seen[target.ID] = true
+			reachable[target.ID] = true
+			queue = append(queue, target.ID)
+		}
+	}
+
+	return reachable
 }

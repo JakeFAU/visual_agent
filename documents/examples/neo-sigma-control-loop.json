@@ -1,0 +1,220 @@
+{
+  "version": "1.0",
+  "name": "NeoSigma Control Loop",
+  "nodes": [
+    {
+      "id": "input-1",
+      "type": "input_node",
+      "position": { "x": 40, "y": 220 },
+      "config": {
+        "name": "user_input",
+        "description": "Describe the failing regression cluster and the desired fix."
+      }
+    },
+    {
+      "id": "llm-analyze",
+      "type": "llm_node",
+      "position": { "x": 300, "y": 80 },
+      "config": {
+        "name": "analyze_failure_patterns",
+        "description": "Analyze the current failure cluster and propose the next harness change.",
+        "model": "gemini-2.5-flash",
+        "instruction": "Analyze the active regression cluster. Return JSON with keys: status ('pass' or 'fail'), regression, val_score, next_change, and rationale. Set status to 'pass' only when the failures are resolved enough to exit the loop.",
+        "response_mode": "json",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string" },
+            "regression": { "type": "number" },
+            "val_score": { "type": "number" },
+            "next_change": { "type": "string" },
+            "rationale": { "type": "string" }
+          },
+          "required": ["status", "regression", "val_score", "next_change", "rationale"]
+        },
+        "generate_content_config": {
+          "temperature": 0.2,
+          "max_output_tokens": 1024
+        }
+      }
+    },
+    {
+      "id": "if-gate",
+      "type": "if_else_node",
+      "position": { "x": 620, "y": 110 },
+      "config": {
+        "condition_language": "CEL",
+        "condition": "state.analyze_failure_patterns.status == 'pass'"
+      }
+    },
+    {
+      "id": "llm-exit",
+      "type": "llm_node",
+      "position": { "x": 940, "y": 20 },
+      "config": {
+        "name": "exit_inner_loop",
+        "description": "Summarize the resolved state and why the loop can stop.",
+        "model": "gemini-2.5-flash",
+        "instruction": "Using state.analyze_failure_patterns, summarize why the regression loop can exit now.",
+        "response_mode": "text",
+        "generate_content_config": {
+          "temperature": 0.1,
+          "max_output_tokens": 512
+        }
+      }
+    },
+    {
+      "id": "llm-revert",
+      "type": "llm_node",
+      "position": { "x": 930, "y": 220 },
+      "config": {
+        "name": "revert_attempt",
+        "description": "Choose the next fallback or revert action.",
+        "model": "gemini-2.5-flash",
+        "instruction": "The regression gate failed. Propose a different approach. Return JSON with keys: budget_exhausted (boolean), next_step, and reason.",
+        "response_mode": "json",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "budget_exhausted": { "type": "boolean" },
+            "next_step": { "type": "string" },
+            "reason": { "type": "string" }
+          },
+          "required": ["budget_exhausted", "next_step", "reason"]
+        },
+        "generate_content_config": {
+          "temperature": 0.2,
+          "max_output_tokens": 768
+        }
+      }
+    },
+    {
+      "id": "if-budget",
+      "type": "if_else_node",
+      "position": { "x": 1240, "y": 250 },
+      "config": {
+        "condition_language": "CEL",
+        "condition": "state.revert_attempt.budget_exhausted == true"
+      }
+    },
+    {
+      "id": "llm-budget",
+      "type": "llm_node",
+      "position": { "x": 1540, "y": 320 },
+      "config": {
+        "name": "budget_exhausted_exit",
+        "description": "Summarize the partial result when the retry budget is exhausted.",
+        "model": "gemini-2.5-flash",
+        "instruction": "Explain that the retry budget is exhausted, summarize the best attempt so far, and state the recommended manual next step.",
+        "response_mode": "text",
+        "generate_content_config": {
+          "temperature": 0.1,
+          "max_output_tokens": 512
+        }
+      }
+    },
+    {
+      "id": "output-success",
+      "type": "output_node",
+      "position": { "x": 1260, "y": 20 },
+      "config": {
+        "name": "success_output",
+        "output_key": "result",
+        "format": "message"
+      }
+    },
+    {
+      "id": "output-budget",
+      "type": "output_node",
+      "position": { "x": 1860, "y": 320 },
+      "config": {
+        "name": "budget_output",
+        "output_key": "result",
+        "format": "message"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-input-analyze",
+      "source": "input-1",
+      "source_port": "message",
+      "target": "llm-analyze",
+      "target_port": "message",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    },
+    {
+      "id": "e-analyze-gate",
+      "source": "llm-analyze",
+      "source_port": "message",
+      "target": "if-gate",
+      "target_port": "message",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    },
+    {
+      "id": "e-gate-pass",
+      "source": "if-gate",
+      "source_port": "message:true",
+      "target": "llm-exit",
+      "target_port": "message",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    },
+    {
+      "id": "e-gate-fail",
+      "source": "if-gate",
+      "source_port": "message:false",
+      "target": "llm-revert",
+      "target_port": "message",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    },
+    {
+      "id": "e-exit-output",
+      "source": "llm-exit",
+      "source_port": "message",
+      "target": "output-success",
+      "target_port": "message",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    },
+    {
+      "id": "e-revert-budget",
+      "source": "llm-revert",
+      "source_port": "message",
+      "target": "if-budget",
+      "target_port": "message",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    },
+    {
+      "id": "e-budget-true",
+      "source": "if-budget",
+      "source_port": "message:true",
+      "target": "llm-budget",
+      "target_port": "message",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    },
+    {
+      "id": "e-budget-false",
+      "source": "if-budget",
+      "source_port": "message:false",
+      "target": "llm-analyze",
+      "target_port": "message",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    },
+    {
+      "id": "e-budget-output",
+      "source": "llm-budget",
+      "source_port": "message",
+      "target": "output-budget",
+      "target_port": "message",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    }
+  ]
+}

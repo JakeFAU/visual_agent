@@ -6,6 +6,13 @@ export interface ExecutionEvent {
   author?: string;
 }
 
+export interface UsageSnapshot {
+  promptTokens: number;
+  responseTokens: number;
+  totalTokens: number;
+  thoughtsTokens: number;
+}
+
 // The backend currently forwards raw ADK events, which may use either Go-style
 // exported field names or camelCase names depending on where the payload was
 // produced. These helpers normalize both shapes.
@@ -18,6 +25,20 @@ const getParts = (content: any): any[] => {
   const parts = messageContent?.Parts ?? messageContent?.parts;
 
   return Array.isArray(parts) ? parts : [];
+};
+
+export const getUsageSnapshot = (content: any): UsageSnapshot | null => {
+  const usage = content?.UsageMetadata ?? content?.usageMetadata;
+  if (!usage) {
+    return null;
+  }
+
+  return {
+    promptTokens: Number(usage.PromptTokenCount ?? usage.promptTokenCount ?? 0),
+    responseTokens: Number(usage.CandidatesTokenCount ?? usage.candidatesTokenCount ?? usage.ResponseTokenCount ?? usage.responseTokenCount ?? 0),
+    totalTokens: Number(usage.TotalTokenCount ?? usage.totalTokenCount ?? 0),
+    thoughtsTokens: Number(usage.ThoughtsTokenCount ?? usage.thoughtsTokenCount ?? 0),
+  };
 };
 
 const stringifyValue = (value: unknown): string | null => {
