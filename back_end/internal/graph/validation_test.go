@@ -69,11 +69,19 @@ func TestGraphValidateRejectsJSONPathConditions(t *testing.T) {
 	}
 }
 
-func TestGraphValidateRejectsUnsupportedWhileNode(t *testing.T) {
+func TestGraphValidateAcceptsWhileNode(t *testing.T) {
 	g := Graph{
 		Version: SupportedGraphVersion,
-		Name:    "Invalid While",
+		Name:    "Valid While",
 		Nodes: []Node{
+			{
+				ID:   "input-1",
+				Type: "input_node",
+				Config: InputNodeConfig{
+					Name:        "user_input",
+					Description: "User input",
+				},
+			},
 			{
 				ID:   "while-1",
 				Type: "while_node",
@@ -82,11 +90,237 @@ func TestGraphValidateRejectsUnsupportedWhileNode(t *testing.T) {
 					MaxIterations: 3,
 				},
 			},
+			{
+				ID:   "loop-body",
+				Type: "llm_node",
+				Config: LLMNodeConfig{
+					Name:         "loop_body",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "Loop",
+					ResponseMode: "text",
+				},
+			},
+			{
+				ID:   "done",
+				Type: "llm_node",
+				Config: LLMNodeConfig{
+					Name:         "done",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "Done",
+					ResponseMode: "text",
+				},
+			},
+		},
+		Edges: []Edge{
+			{ID: "e-input", Source: "input-1", SourcePort: "message", Target: "while-1", TargetPort: "message"},
+			{ID: "e-loop", Source: "while-1", SourcePort: "message:loop", Target: "loop-body", TargetPort: "message"},
+			{ID: "e-done", Source: "while-1", SourcePort: "message:done", Target: "done", TargetPort: "message"},
+			{ID: "e-back", Source: "loop-body", SourcePort: "message", Target: "while-1", TargetPort: "message"},
+		},
+	}
+
+	if err := g.Validate(); err != nil {
+		t.Fatalf("expected while_node graph to validate, got %v", err)
+	}
+}
+
+func TestGraphValidateAcceptsWhileDoneBranchToOutputNode(t *testing.T) {
+	g := Graph{
+		Version: SupportedGraphVersion,
+		Name:    "While Container Output",
+		Nodes: []Node{
+			{
+				ID:   "input-1",
+				Type: "input_node",
+				Config: InputNodeConfig{
+					Name:        "user_input",
+					Description: "User input",
+				},
+			},
+			{
+				ID:   "analyze",
+				Type: "llm_node",
+				Config: LLMNodeConfig{
+					Name:         "analyze",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "Analyze",
+					ResponseMode: "json",
+				},
+			},
+			{
+				ID:   "while-1",
+				Type: "while_node",
+				Config: WhileNodeConfig{
+					Condition:     `state.analyze.status != "pass"`,
+					MaxIterations: 3,
+				},
+			},
+			{
+				ID:   "retry",
+				Type: "llm_node",
+				Config: LLMNodeConfig{
+					Name:         "retry",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "Retry",
+					ResponseMode: "text",
+				},
+			},
+			{
+				ID:   "output-1",
+				Type: "output_node",
+				Config: OutputNodeConfig{
+					Name:      "final_output",
+					OutputKey: "result",
+					Format:    "message",
+				},
+			},
+		},
+		Edges: []Edge{
+			{ID: "e-input", Source: "input-1", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+			{ID: "e-analyze-done", Source: "analyze", SourcePort: "message", Target: "while-1", TargetPort: "message:done"},
+			{ID: "e-loop", Source: "while-1", SourcePort: "message:loop", Target: "retry", TargetPort: "message"},
+			{ID: "e-repeat", Source: "retry", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+			{ID: "e-done", Source: "while-1", SourcePort: "message:done", Target: "output-1", TargetPort: "message"},
+		},
+	}
+
+	if err := g.Validate(); err != nil {
+		t.Fatalf("expected while output graph to validate, got %v", err)
+	}
+}
+
+func TestGraphValidateRejectsWhileNodeWithoutPositiveMaxIterations(t *testing.T) {
+	g := Graph{
+		Version: SupportedGraphVersion,
+		Name:    "Invalid While",
+		Nodes: []Node{
+			{
+				ID:   "while-1",
+				Type: "while_node",
+				Config: WhileNodeConfig{
+					Condition:     "true",
+					MaxIterations: 0,
+				},
+			},
 		},
 	}
 
 	if err := g.Validate(); err == nil {
 		t.Fatal("expected while_node validation error, got nil")
+	}
+}
+
+func TestGraphValidateAcceptsNodeInsideWhileContainer(t *testing.T) {
+	g := Graph{
+		Version: SupportedGraphVersion,
+		Name:    "Nested Loop Body",
+		Nodes: []Node{
+			{
+				ID:   "input-1",
+				Type: "input_node",
+				Config: InputNodeConfig{
+					Name:        "user_input",
+					Description: "User input",
+				},
+			},
+			{
+				ID:   "while-1",
+				Type: "while_node",
+				Config: WhileNodeConfig{
+					Condition:     "state.review.status != 'pass'",
+					MaxIterations: 3,
+				},
+			},
+			{
+				ID:       "review",
+				Type:     "llm_node",
+				ParentID: "while-1",
+				Config: LLMNodeConfig{
+					Name:         "review",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "Review",
+					ResponseMode: "text",
+				},
+			},
+			{
+				ID:   "done",
+				Type: "llm_node",
+				Config: LLMNodeConfig{
+					Name:         "done",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "Done",
+					ResponseMode: "text",
+				},
+			},
+		},
+		Edges: []Edge{
+			{ID: "e-input", Source: "input-1", SourcePort: "message", Target: "while-1", TargetPort: "message"},
+			{ID: "e-loop", Source: "while-1", SourcePort: "message:loop", Target: "review", TargetPort: "message"},
+			{ID: "e-repeat", Source: "review", SourcePort: "message", Target: "while-1", TargetPort: "message:return"},
+			{ID: "e-done", Source: "while-1", SourcePort: "message:done", Target: "done", TargetPort: "message"},
+		},
+	}
+
+	if err := g.Validate(); err != nil {
+		t.Fatalf("expected parented graph to validate, got %v", err)
+	}
+}
+
+func TestGraphValidateRejectsUnknownParent(t *testing.T) {
+	g := Graph{
+		Version: SupportedGraphVersion,
+		Name:    "Unknown Parent",
+		Nodes: []Node{
+			{
+				ID:       "review",
+				Type:     "llm_node",
+				ParentID: "missing",
+				Config: LLMNodeConfig{
+					Name:         "review",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "Review",
+					ResponseMode: "text",
+				},
+			},
+		},
+	}
+
+	if err := g.Validate(); err == nil {
+		t.Fatal("expected unknown parent validation error, got nil")
+	}
+}
+
+func TestGraphValidateRejectsParentThatIsNotWhileContainer(t *testing.T) {
+	g := Graph{
+		Version: SupportedGraphVersion,
+		Name:    "Invalid Parent Type",
+		Nodes: []Node{
+			{
+				ID:   "llm-1",
+				Type: "llm_node",
+				Config: LLMNodeConfig{
+					Name:         "a",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "A",
+					ResponseMode: "text",
+				},
+			},
+			{
+				ID:       "llm-2",
+				Type:     "llm_node",
+				ParentID: "llm-1",
+				Config: LLMNodeConfig{
+					Name:         "b",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "B",
+					ResponseMode: "text",
+				},
+			},
+		},
+	}
+
+	if err := g.Validate(); err == nil {
+		t.Fatal("expected invalid parent type error, got nil")
 	}
 }
 

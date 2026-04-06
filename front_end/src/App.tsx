@@ -1,7 +1,10 @@
 import React, { useState, useCallback } from 'react';
 import ReactFlow, { 
   Background, 
+  ConnectionLineType,
+  ConnectionMode,
   Controls, 
+  MarkerType,
   Panel,
   useReactFlow,
   BackgroundVariant
@@ -14,6 +17,8 @@ import { LLMNode } from './components/nodes/LLMNode';
 import { ToolboxNode } from './components/nodes/ToolboxNode';
 import { OutputNode } from './components/nodes/OutputNode';
 import { IfElseNode } from './components/nodes/IfElseNode';
+import { WhileNode } from './components/nodes/WhileNode';
+import { WorkflowEdge } from './components/edges/WorkflowEdge';
 import { SidePanel } from './components/SidePanel';
 import { LogPanel } from './components/LogPanel';
 import { Palette } from './components/Palette';
@@ -26,6 +31,11 @@ const nodeTypes = {
   toolbox: ToolboxNode,
   output_node: OutputNode,
   if_else_node: IfElseNode,
+  while_node: WhileNode,
+};
+
+const edgeTypes = {
+  workflow: WorkflowEdge,
 };
 
 interface RuntimeStats {
@@ -56,9 +66,9 @@ const App: React.FC = () => {
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [finalResponse, setFinalResponse] = useState<string | null>(null);
   const [executionInput, setExecutionInput] = useState('Hello, who are you?');
-  const [maxStepsInput, setMaxStepsInput] = useState('128');
-  const [maxDurationSecondsInput, setMaxDurationSecondsInput] = useState('60');
-  const [maxTokensInput, setMaxTokensInput] = useState('');
+  const [maxStepsInput] = useState('128');
+  const [maxDurationSecondsInput] = useState('60');
+  const [maxTokensInput] = useState('');
   const [runtimeStats, setRuntimeStats] = useState<RuntimeStats | null>(null);
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -182,9 +192,11 @@ const App: React.FC = () => {
             // response panel so intermediate state deltas and tool events remain
             // visible during execution.
             const responseText = extractFinalResponse(event, outputKeys);
-            const logContent = responseText ?? extractDisplayContent(event, outputKeys) ?? event.content;
+            const logContent = responseText ?? extractDisplayContent(event, outputKeys);
 
-            addLog(logType, logContent);
+            if (logContent != null) {
+              addLog(logType, logContent);
+            }
             updateUsageStats(event.content, startedAt);
 
             if (isFinalAgentResponse(event) && responseText) {
@@ -285,37 +297,6 @@ const App: React.FC = () => {
               className="w-full bg-transparent text-sm text-gray-100 focus:outline-none placeholder:text-gray-600"
             />
           </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-gray-950 border border-gray-800">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500 shrink-0">Steps</span>
-            <input
-              type="number"
-              min="1"
-              value={maxStepsInput}
-              onChange={(e) => setMaxStepsInput(e.target.value)}
-              className="w-16 bg-transparent text-sm text-gray-100 focus:outline-none"
-            />
-          </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-gray-950 border border-gray-800">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500 shrink-0">Secs</span>
-            <input
-              type="number"
-              min="1"
-              value={maxDurationSecondsInput}
-              onChange={(e) => setMaxDurationSecondsInput(e.target.value)}
-              className="w-16 bg-transparent text-sm text-gray-100 focus:outline-none"
-            />
-          </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-gray-950 border border-gray-800">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500 shrink-0">Tokens</span>
-            <input
-              type="number"
-              min="1"
-              value={maxTokensInput}
-              onChange={(e) => setMaxTokensInput(e.target.value)}
-              placeholder="∞"
-              className="w-20 bg-transparent text-sm text-gray-100 focus:outline-none placeholder:text-gray-600"
-            />
-          </div>
           <button 
             className="px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:bg-gray-700 transition-all active:scale-95"
             onClick={handleLoad}
@@ -355,6 +336,16 @@ const App: React.FC = () => {
             onDrop={onDrop}
             onDragOver={onDragOver}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            connectionMode={ConnectionMode.Loose}
+            connectionLineType={ConnectionLineType.SmoothStep}
+            connectionRadius={40}
+            fitViewOptions={{ padding: 0.4, maxZoom: 0.85 }}
+            defaultEdgeOptions={{
+              type: 'workflow',
+              style: { stroke: '#94a3b8', strokeWidth: 2 },
+              markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
+            }}
             fitView
           >
             <Background color="#222" gap={20} variant={BackgroundVariant.Lines} />

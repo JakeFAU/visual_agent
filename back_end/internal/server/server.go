@@ -303,6 +303,9 @@ func (t executionTracker) errorPayload(execCtx context.Context, err error) (stri
 	if execCtx.Err() == context.DeadlineExceeded || strings.Contains(strings.ToLower(err.Error()), "deadline exceeded") {
 		return "duration_budget_exceeded", fmt.Sprintf("duration budget exceeded after %d ms", t.Budget.MaxDurationMS)
 	}
+	if strings.Contains(err.Error(), "exceeded max_iterations") {
+		return "loop_iteration_budget_exceeded", err.Error()
+	}
 	if strings.Contains(err.Error(), "possible infinite loop") {
 		return "step_budget_exceeded", err.Error()
 	}

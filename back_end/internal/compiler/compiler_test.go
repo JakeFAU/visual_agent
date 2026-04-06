@@ -385,6 +385,295 @@ func TestCompileExecutesControlLoop(t *testing.T) {
 	}
 }
 
+func TestCompileExecutesWhileLoop(t *testing.T) {
+	g := graph.Graph{
+		Version: "1.0",
+		Name:    "while_workflow",
+		Nodes: []graph.Node{
+			{
+				ID:   "input-1",
+				Type: "input_node",
+				Config: graph.InputNodeConfig{
+					Name:        "user_input",
+					Description: "User input",
+				},
+			},
+			{
+				ID:   "analyze",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "analyze",
+					Model:        "mock-model",
+					Instruction:  "analyze",
+					ResponseMode: "json",
+				},
+			},
+			{
+				ID:   "loop-gate",
+				Type: "while_node",
+				Config: graph.WhileNodeConfig{
+					Condition:     `state.analyze.status != "pass"`,
+					MaxIterations: 3,
+				},
+			},
+			{
+				ID:   "retry",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "retry",
+					Model:        "mock-model",
+					Instruction:  "retry",
+					ResponseMode: "text",
+				},
+			},
+			{
+				ID:   "done",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "done",
+					Model:        "mock-model",
+					Instruction:  "done",
+					ResponseMode: "text",
+				},
+			},
+			{
+				ID:   "output-1",
+				Type: "output_node",
+				Config: graph.OutputNodeConfig{
+					Name:      "final_output",
+					OutputKey: "result",
+					Format:    "message",
+				},
+			},
+		},
+		Edges: []graph.Edge{
+			{ID: "e-input", Source: "input-1", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+			{ID: "e-analyze-while", Source: "analyze", SourcePort: "message", Target: "loop-gate", TargetPort: "message"},
+			{ID: "e-while-loop", Source: "loop-gate", SourcePort: "message:loop", Target: "retry", TargetPort: "message"},
+			{ID: "e-while-done", Source: "loop-gate", SourcePort: "message:done", Target: "done", TargetPort: "message"},
+			{ID: "e-retry-loop", Source: "retry", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+			{ID: "e-done-output", Source: "done", SourcePort: "message", Target: "output-1", TargetPort: "message"},
+		},
+	}
+
+	c := New()
+	loopCompiler := &LoopTestCompiler{}
+	c.Register("llm_node", loopCompiler)
+	c.Register("while_node", &WhileNodeCompiler{})
+
+	compiled, err := c.Compile(g)
+	if err != nil {
+		t.Fatalf("Compilation failed: %v", err)
+	}
+
+	rt := runtime.NewLocalRuntime()
+	var gotResult string
+	for event, err := range rt.Execute(context.Background(), compiled, "fix it") {
+		if err != nil {
+			t.Fatalf("Execution failed: %v", err)
+		}
+		if event == nil {
+			continue
+		}
+		if value, ok := event.Actions.StateDelta["result"].(string); ok {
+			gotResult = value
+		}
+	}
+
+	if gotResult != "Failures resolved" {
+		t.Fatalf("final output mismatch: got %q want %q", gotResult, "Failures resolved")
+	}
+
+	if loopCompiler.runCounts["analyze"] != 2 {
+		t.Fatalf("analyze run count mismatch: got %d want 2", loopCompiler.runCounts["analyze"])
+	}
+
+	if loopCompiler.runCounts["retry"] != 1 {
+		t.Fatalf("retry run count mismatch: got %d want 1", loopCompiler.runCounts["retry"])
+	}
+}
+
+func TestCompileExecutesWhileLoopWithContainerOutput(t *testing.T) {
+	g := graph.Graph{
+		Version: "1.0",
+		Name:    "while_output_workflow",
+		Nodes: []graph.Node{
+			{
+				ID:   "input-1",
+				Type: "input_node",
+				Config: graph.InputNodeConfig{
+					Name:        "user_input",
+					Description: "User input",
+				},
+			},
+			{
+				ID:   "analyze",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "analyze",
+					Model:        "mock-model",
+					Instruction:  "analyze",
+					ResponseMode: "json",
+				},
+			},
+			{
+				ID:   "loop-gate",
+				Type: "while_node",
+				Config: graph.WhileNodeConfig{
+					Condition:     `state.analyze.status != "pass"`,
+					MaxIterations: 3,
+				},
+			},
+			{
+				ID:   "retry",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "retry",
+					Model:        "mock-model",
+					Instruction:  "retry",
+					ResponseMode: "text",
+				},
+			},
+			{
+				ID:   "output-1",
+				Type: "output_node",
+				Config: graph.OutputNodeConfig{
+					Name:      "final_output",
+					OutputKey: "result",
+					Format:    "message",
+				},
+			},
+		},
+		Edges: []graph.Edge{
+			{ID: "e-input", Source: "input-1", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+			{ID: "e-analyze-out", Source: "analyze", SourcePort: "message", Target: "loop-gate", TargetPort: "message:done"},
+			{ID: "e-while-loop", Source: "loop-gate", SourcePort: "message:loop", Target: "retry", TargetPort: "message"},
+			{ID: "e-while-done", Source: "loop-gate", SourcePort: "message:done", Target: "output-1", TargetPort: "message"},
+			{ID: "e-retry-loop", Source: "retry", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+		},
+	}
+
+	c := New()
+	loopCompiler := &LoopTestCompiler{}
+	c.Register("llm_node", loopCompiler)
+	c.Register("while_node", &WhileNodeCompiler{})
+
+	compiled, err := c.Compile(g)
+	if err != nil {
+		t.Fatalf("Compilation failed: %v", err)
+	}
+
+	rt := runtime.NewLocalRuntime()
+	var gotResult map[string]any
+	for event, err := range rt.Execute(context.Background(), compiled, "fix it") {
+		if err != nil {
+			t.Fatalf("Execution failed: %v", err)
+		}
+		if event == nil {
+			continue
+		}
+		if value, ok := event.Actions.StateDelta["result"].(map[string]any); ok {
+			gotResult = value
+		}
+	}
+
+	if gotResult == nil {
+		t.Fatal("expected while container output to populate result")
+	}
+	if gotResult["status"] != "pass" {
+		t.Fatalf("result status mismatch: got %v want %q", gotResult["status"], "pass")
+	}
+	if gotResult["iteration"] != 2 {
+		t.Fatalf("result iteration mismatch: got %v want %d", gotResult["iteration"], 2)
+	}
+
+	if loopCompiler.runCounts["analyze"] != 2 {
+		t.Fatalf("analyze run count mismatch: got %d want 2", loopCompiler.runCounts["analyze"])
+	}
+	if loopCompiler.runCounts["retry"] != 1 {
+		t.Fatalf("retry run count mismatch: got %d want 1", loopCompiler.runCounts["retry"])
+	}
+}
+
+func TestCompileWhileNodeEnforcesLocalIterationBudget(t *testing.T) {
+	g := graph.Graph{
+		Version: "1.0",
+		Name:    "while_budget_workflow",
+		Nodes: []graph.Node{
+			{
+				ID:   "input-1",
+				Type: "input_node",
+				Config: graph.InputNodeConfig{
+					Name:        "user_input",
+					Description: "User input",
+				},
+			},
+			{
+				ID:   "analyze",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "analyze",
+					Model:        "mock-model",
+					Instruction:  "analyze",
+					ResponseMode: "json",
+				},
+			},
+			{
+				ID:   "loop-gate",
+				Type: "while_node",
+				Config: graph.WhileNodeConfig{
+					Condition:     `true`,
+					MaxIterations: 1,
+				},
+			},
+			{
+				ID:   "retry",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "retry",
+					Model:        "mock-model",
+					Instruction:  "retry",
+					ResponseMode: "text",
+				},
+			},
+		},
+		Edges: []graph.Edge{
+			{ID: "e-input", Source: "input-1", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+			{ID: "e-analyze-while", Source: "analyze", SourcePort: "message", Target: "loop-gate", TargetPort: "message"},
+			{ID: "e-while-loop", Source: "loop-gate", SourcePort: "message:loop", Target: "retry", TargetPort: "message"},
+			{ID: "e-while-done", Source: "loop-gate", SourcePort: "message:done", Target: "retry", TargetPort: "message"},
+			{ID: "e-retry-loop", Source: "retry", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+		},
+	}
+
+	c := New()
+	loopCompiler := &LoopTestCompiler{}
+	c.Register("llm_node", loopCompiler)
+	c.Register("while_node", &WhileNodeCompiler{})
+
+	compiled, err := c.Compile(g)
+	if err != nil {
+		t.Fatalf("Compilation failed: %v", err)
+	}
+
+	rt := runtime.NewLocalRuntime()
+	var gotErr error
+	for _, err := range rt.Execute(context.Background(), compiled, "fix it") {
+		if err != nil {
+			gotErr = err
+			break
+		}
+	}
+
+	if gotErr == nil {
+		t.Fatal("expected while max_iterations error, got nil")
+	}
+
+	if want := `while node "loop-gate" exceeded max_iterations 1`; !strings.Contains(gotErr.Error(), want) {
+		t.Fatalf("while budget error mismatch: got %q want substring %q", gotErr.Error(), want)
+	}
+}
+
 func TestCompileWithOptionsEnforcesStepBudget(t *testing.T) {
 	g := graph.Graph{
 		Version: "1.0",

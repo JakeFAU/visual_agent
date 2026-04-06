@@ -14,15 +14,8 @@ export const InputNode = memo(({ data, selected }: NodeProps<{ config: InputNode
       <Handle
         type="source"
         position={Position.Right}
-        id="message"
+        id="message:out"
         className="w-2 h-2 !bg-green-500 border-2 border-gray-800"
-        style={{ right: -4 }}
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="out_message"
-        className="w-2 h-2 !bg-transparent border-0 opacity-0 pointer-events-none"
         style={{ right: -4 }}
       />
     </div>

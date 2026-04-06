@@ -73,12 +73,16 @@ type ToolboxNodeConfig struct {
 // IfElseNodeConfig defines a control-flow node that evaluates a condition and
 // transfers execution to one of two downstream agents.
 type IfElseNodeConfig struct {
-	ConditionLanguage string `json:"condition_language"` // "CEL" or "JSONPath"
+	ConditionLanguage string `json:"condition_language"` // Currently only "CEL" is supported.
 	Condition         string `json:"condition"`
 }
 
-// WhileNodeConfig remains in the contract for forward compatibility, but the
-// backend explicitly rejects it in v0.
+// WhileNodeConfig defines a bounded loop gate.
+//
+// The node evaluates Condition on each visit. When the condition returns true,
+// execution follows the loop branch. When it returns false, execution follows
+// the done branch. MaxIterations is a required local safety cap for that
+// specific loop block and is separate from any global per-run execution budget.
 type WhileNodeConfig struct {
 	Condition     string `json:"condition"`
 	MaxIterations int    `json:"max_iterations"`
@@ -92,6 +96,9 @@ type Node struct {
 	ID       string      `json:"id"`
 	Type     string      `json:"type"`
 	Position Position    `json:"position"`
+	ParentID string      `json:"parent_id,omitempty"`
+	Width    float64     `json:"width,omitempty"`
+	Height   float64     `json:"height,omitempty"`
 	Config   interface{} `json:"config"`
 }
 
@@ -125,6 +132,8 @@ func (n Node) AgentName() (string, bool) {
 	case LLMNodeConfig:
 		return cfg.Name, true
 	case IfElseNodeConfig:
+		return n.ID, true
+	case WhileNodeConfig:
 		return n.ID, true
 	default:
 		return "", false

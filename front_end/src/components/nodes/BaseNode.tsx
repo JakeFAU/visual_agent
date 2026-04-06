@@ -16,6 +16,7 @@ export const BaseNode: React.FC<BaseNodeProps> = ({ title, selected, children, c
     green: 'bg-green-500',
     amber: 'bg-amber-500',
     purple: 'bg-purple-500',
+    rose: 'bg-rose-500',
     gray: 'bg-gray-500',
   };
 
