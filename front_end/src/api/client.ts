@@ -44,14 +44,25 @@ export const loadGraph = async (name: string) => {
 	return resp.json();
 };
 
+export interface ExecuteBudget {
+  max_steps?: number;
+  max_duration_ms?: number;
+  max_total_tokens?: number;
+}
+
 // executeGraph starts workflow execution and forwards the backend's SSE event
 // stream to the supplied callback one event at a time.
-export const executeGraph = async (graph: any, input: string, onEvent: (ev: { type: string, content: any, author?: string }) => void) => {
+export const executeGraph = async (
+  graph: any,
+  input: string,
+  budget: ExecuteBudget,
+  onEvent: (ev: { type: string, content: any, author?: string }) => void,
+) => {
   console.log("[DEBUG] Starting executeGraph fetch...");
   const response = await fetch(`${API_BASE}/execute`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ graph, input }),
+    body: JSON.stringify({ graph, input, budget }),
   });
 
   if (!response.ok) {

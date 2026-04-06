@@ -4,16 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 
+	"iter"
+
 	"github.com/JakeFAU/visual_agent/internal/graph"
+	"github.com/JakeFAU/visual_agent/internal/runtime"
 	"google.golang.org/adk/agent"
 	"google.golang.org/adk/model"
+	"google.golang.org/adk/session"
 	"google.golang.org/adk/tool"
 	"google.golang.org/genai"
-	"iter"
 )
 
 // MockModel satisfies the model.LLM interface for testing.
@@ -43,6 +47,10 @@ type BranchCaptureCompiler struct {
 	lastMetadata map[string]interface{}
 }
 
+type LoopTestCompiler struct {
+	runCounts map[string]int
+}
+
 func (c *CaptureCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
 	c.lastMetadata = metadata
 	return agent.New(agent.Config{Name: node.ID})
@@ -55,6 +63,56 @@ func (c *StubToolboxCompiler) Compile(_ graph.Node, _ map[string]interface{}) (a
 func (c *BranchCaptureCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
 	c.lastMetadata = metadata
 	return agent.New(agent.Config{Name: node.ID})
+}
+
+func (c *LoopTestCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
+	cfg, ok := node.Config.(graph.LLMNodeConfig)
+	if !ok {
+		return nil, fmt.Errorf("expected llm config, got %T", node.Config)
+	}
+
+	stateKey, _ := metadata["state_key"].(string)
+	if c.runCounts == nil {
+		c.runCounts = make(map[string]int)
+	}
+
+	return agent.New(agent.Config{
+		Name: cfg.Name,
+		Run: func(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
+			return func(yield func(*session.Event, error) bool) {
+				c.runCounts[node.ID]++
+
+				event := session.NewEvent(ctx.InvocationID())
+				switch cfg.Name {
+				case "analyze":
+					status := "retry"
+					if c.runCounts[node.ID] >= 2 {
+						status = "pass"
+					}
+					event.Actions.StateDelta = map[string]any{
+						stateKey: map[string]any{
+							"status":    status,
+							"iteration": c.runCounts[node.ID],
+						},
+					}
+				case "retry":
+					event.Actions.StateDelta = map[string]any{
+						stateKey: fmt.Sprintf("retry-%d", c.runCounts[node.ID]),
+					}
+				case "done":
+					event.Actions.StateDelta = map[string]any{
+						stateKey: "Failures resolved",
+					}
+				default:
+					event.Actions.StateDelta = map[string]any{
+						stateKey: cfg.Name,
+					}
+				}
+
+				yield(event, nil)
+			}
+		},
+	})
 }
 
 type testToolset struct {
@@ -88,6 +146,15 @@ func TestCompileSequential(t *testing.T) {
   "name": "sequential_workflow",
   "nodes": [
     {
+      "id": "input-1",
+      "type": "input_node",
+      "position": { "x": -250, "y": 0 },
+      "config": {
+        "name": "user_input",
+        "description": "User input"
+      }
+    },
+    {
       "id": "llm-1",
       "type": "llm_node",
       "position": { "x": 0, "y": 0 },
@@ -114,11 +181,18 @@ func TestCompileSequential(t *testing.T) {
   ],
   "edges": [
     {
+      "id": "input-edge",
+      "source": "input-1",
+      "source_port": "message",
+      "target": "llm-1",
+      "target_port": "message"
+    },
+    {
       "id": "edge-1",
       "source": "llm-1",
-      "source_port": "out_message",
+      "source_port": "message",
       "target": "llm-2",
-      "target_port": "in_message"
+      "target_port": "message"
     }
   ]
 }`
@@ -147,6 +221,14 @@ func TestCompileIfElse(t *testing.T) {
   "name": "branching_workflow",
   "nodes": [
     {
+      "id": "input-1",
+      "type": "input_node",
+      "config": {
+        "name": "user_input",
+        "description": "User input"
+      }
+    },
+    {
       "id": "if-1",
       "type": "if_else_node",
       "config": {
@@ -166,6 +248,7 @@ func TestCompileIfElse(t *testing.T) {
     }
   ],
   "edges": [
+    { "id": "input", "source": "input-1", "source_port": "message", "target": "if-1", "target_port": "message" },
     { "id": "e1", "source": "if-1", "source_port": "out_true", "target": "true-branch" },
     { "id": "e2", "source": "if-1", "source_port": "out_false", "target": "false-branch" }
   ]
@@ -190,26 +273,194 @@ func TestCompileIfElse(t *testing.T) {
 	}
 }
 
-func TestCompileCycle(t *testing.T) {
-	cycleJSON := `{
-  "nodes": [
-    {"id": "n1", "type": "llm_node", "config": {"name": "a1"}},
-    {"id": "n2", "type": "llm_node", "config": {"name": "a2"}}
-  ],
-  "edges": [
-    {"id": "e1", "source": "n1", "target": "n2"},
-    {"id": "e2", "source": "n2", "target": "n1"}
-  ]
-}`
-	var g graph.Graph
-	_ = json.Unmarshal([]byte(cycleJSON), &g)
+func TestCompileExecutesControlLoop(t *testing.T) {
+	g := graph.Graph{
+		Version: "1.0",
+		Name:    "loop_workflow",
+		Nodes: []graph.Node{
+			{
+				ID:   "input-1",
+				Type: "input_node",
+				Config: graph.InputNodeConfig{
+					Name:        "user_input",
+					Description: "User input",
+				},
+			},
+			{
+				ID:   "analyze",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "analyze",
+					Model:        "mock-model",
+					Instruction:  "analyze",
+					ResponseMode: "json",
+				},
+			},
+			{
+				ID:   "gate",
+				Type: "if_else_node",
+				Config: graph.IfElseNodeConfig{
+					ConditionLanguage: "CEL",
+					Condition:         `state.analyze.status == "pass"`,
+				},
+			},
+			{
+				ID:   "retry",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "retry",
+					Model:        "mock-model",
+					Instruction:  "retry",
+					ResponseMode: "text",
+				},
+			},
+			{
+				ID:   "done",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "done",
+					Model:        "mock-model",
+					Instruction:  "done",
+					ResponseMode: "text",
+				},
+			},
+			{
+				ID:   "output-1",
+				Type: "output_node",
+				Config: graph.OutputNodeConfig{
+					Name:      "final_output",
+					OutputKey: "result",
+					Format:    "message",
+				},
+			},
+		},
+		Edges: []graph.Edge{
+			{ID: "e-input", Source: "input-1", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+			{ID: "e-analyze-gate", Source: "analyze", SourcePort: "message", Target: "gate", TargetPort: "message"},
+			{ID: "e-gate-true", Source: "gate", SourcePort: "message:true", Target: "done", TargetPort: "message"},
+			{ID: "e-gate-false", Source: "gate", SourcePort: "message:false", Target: "retry", TargetPort: "message"},
+			{ID: "e-retry-loop", Source: "retry", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+			{ID: "e-done-output", Source: "done", SourcePort: "message", Target: "output-1", TargetPort: "message"},
+		},
+	}
 
 	c := New()
-	c.Register("llm_node", &LLMNodeCompiler{NewModel: MockModelFactory})
+	loopCompiler := &LoopTestCompiler{}
+	c.Register("llm_node", loopCompiler)
+	c.Register("if_else_node", &IfElseNodeCompiler{})
 
-	_, err := c.Compile(g)
-	if err == nil {
-		t.Fatal("Expected error for cyclic graph, got nil")
+	compiled, err := c.Compile(g)
+	if err != nil {
+		t.Fatalf("Compilation failed: %v", err)
+	}
+
+	rt := runtime.NewLocalRuntime()
+	var gotResult string
+	for event, err := range rt.Execute(context.Background(), compiled, "fix it") {
+		if err != nil {
+			t.Fatalf("Execution failed: %v", err)
+		}
+		if event == nil {
+			continue
+		}
+		if value, ok := event.Actions.StateDelta["result"].(string); ok {
+			gotResult = value
+		}
+	}
+
+	if gotResult != "Failures resolved" {
+		t.Fatalf("final output mismatch: got %q want %q", gotResult, "Failures resolved")
+	}
+
+	if loopCompiler.runCounts["analyze"] != 2 {
+		t.Fatalf("analyze run count mismatch: got %d want 2", loopCompiler.runCounts["analyze"])
+	}
+
+	if loopCompiler.runCounts["retry"] != 1 {
+		t.Fatalf("retry run count mismatch: got %d want 1", loopCompiler.runCounts["retry"])
+	}
+
+	if loopCompiler.runCounts["done"] != 1 {
+		t.Fatalf("done run count mismatch: got %d want 1", loopCompiler.runCounts["done"])
+	}
+}
+
+func TestCompileWithOptionsEnforcesStepBudget(t *testing.T) {
+	g := graph.Graph{
+		Version: "1.0",
+		Name:    "loop_budget_workflow",
+		Nodes: []graph.Node{
+			{
+				ID:   "input-1",
+				Type: "input_node",
+				Config: graph.InputNodeConfig{
+					Name:        "user_input",
+					Description: "User input",
+				},
+			},
+			{
+				ID:   "analyze",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "analyze",
+					Model:        "mock-model",
+					Instruction:  "analyze",
+					ResponseMode: "json",
+				},
+			},
+			{
+				ID:   "gate",
+				Type: "if_else_node",
+				Config: graph.IfElseNodeConfig{
+					ConditionLanguage: "CEL",
+					Condition:         `state.analyze.status == "pass"`,
+				},
+			},
+			{
+				ID:   "retry",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "retry",
+					Model:        "mock-model",
+					Instruction:  "retry",
+					ResponseMode: "text",
+				},
+			},
+		},
+		Edges: []graph.Edge{
+			{ID: "e-input", Source: "input-1", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+			{ID: "e-analyze-gate", Source: "analyze", SourcePort: "message", Target: "gate", TargetPort: "message"},
+			{ID: "e-gate-false", Source: "gate", SourcePort: "message:false", Target: "retry", TargetPort: "message"},
+			{ID: "e-gate-true", Source: "gate", SourcePort: "message:true", Target: "retry", TargetPort: "message"},
+			{ID: "e-retry-loop", Source: "retry", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+		},
+	}
+
+	c := New()
+	loopCompiler := &LoopTestCompiler{}
+	c.Register("llm_node", loopCompiler)
+	c.Register("if_else_node", &IfElseNodeCompiler{})
+
+	compiled, err := c.CompileWithOptions(g, CompileOptions{MaxSteps: 3})
+	if err != nil {
+		t.Fatalf("Compilation failed: %v", err)
+	}
+
+	rt := runtime.NewLocalRuntime()
+	var gotErr error
+	for _, err := range rt.Execute(context.Background(), compiled, "fix it") {
+		if err != nil {
+			gotErr = err
+			break
+		}
+	}
+
+	if gotErr == nil {
+		t.Fatal("expected step budget error, got nil")
+	}
+
+	if want := "possible infinite loop"; !strings.Contains(gotErr.Error(), want) {
+		t.Fatalf("step budget error mismatch: got %q want substring %q", gotErr.Error(), want)
 	}
 }
 
@@ -218,6 +469,15 @@ func TestCompileUsesOutputNodeKey(t *testing.T) {
   "version": "1.0",
   "name": "output_key_workflow",
   "nodes": [
+    {
+      "id": "input-1",
+      "type": "input_node",
+      "position": { "x": -300, "y": 0 },
+      "config": {
+        "name": "user_input",
+        "description": "User input"
+      }
+    },
     {
       "id": "llm-1",
       "type": "llm_node",
@@ -243,6 +503,15 @@ func TestCompileUsesOutputNodeKey(t *testing.T) {
     }
   ],
   "edges": [
+    {
+      "id": "input-edge",
+      "source": "input-1",
+      "source_port": "message",
+      "target": "llm-1",
+      "target_port": "message",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    },
     {
       "id": "edge-1",
       "source": "llm-1",
@@ -290,6 +559,14 @@ func TestCompileWiresToolboxHandleToLLMNode(t *testing.T) {
   "name": "toolbox_wiring_workflow",
   "nodes": [
     {
+      "id": "input-1",
+      "type": "input_node",
+      "config": {
+        "name": "user_input",
+        "description": "User input"
+      }
+    },
+    {
       "id": "toolbox-1",
       "type": "toolbox",
       "config": {
@@ -307,6 +584,15 @@ func TestCompileWiresToolboxHandleToLLMNode(t *testing.T) {
     }
   ],
   "edges": [
+    {
+      "id": "edge-0",
+      "source": "input-1",
+      "source_port": "message",
+      "target": "llm-1",
+      "target_port": "message",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    },
     {
       "id": "edge-1",
       "source": "toolbox-1",
@@ -468,6 +754,14 @@ func TestCompileIfElseWiresBranchTargets(t *testing.T) {
   "name": "if_else_wiring",
   "nodes": [
     {
+      "id": "input-1",
+      "type": "input_node",
+      "config": {
+        "name": "user_input",
+        "description": "User input"
+      }
+    },
+    {
       "id": "if-1",
       "type": "if_else_node",
       "config": {
@@ -497,6 +791,13 @@ func TestCompileIfElseWiresBranchTargets(t *testing.T) {
     }
   ],
   "edges": [
+    {
+      "id": "e0",
+      "source": "input-1",
+      "source_port": "message",
+      "target": "if-1",
+      "target_port": "message"
+    },
     {
       "id": "e1",
       "source": "if-1",

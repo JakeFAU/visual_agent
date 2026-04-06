@@ -2,9 +2,9 @@ package compiler
 
 import (
 	"fmt"
+
 	"github.com/JakeFAU/visual_agent/internal/graph"
 	"google.golang.org/adk/agent"
-	"google.golang.org/adk/agent/workflowagents/sequentialagent"
 	"google.golang.org/adk/tool"
 )
 
@@ -22,6 +22,20 @@ func isIfElseFalseEdge(edge graph.Edge) bool {
 	return edge.SourcePort == "message:false" || edge.SourcePort == "out_false"
 }
 
+func isExecutionNode(node graph.Node) bool {
+	_, ok := node.AgentName()
+	return ok
+}
+
+func defaultStateKey(node graph.Node) string {
+	switch cfg := node.Config.(type) {
+	case graph.LLMNodeConfig:
+		return cfg.Name
+	default:
+		return ""
+	}
+}
+
 // NodeCompiler translates a specific graph node into its ADK representation
 // interface{} (any) allows nodes to return agents, toolsets, or other configs.
 type NodeCompiler interface {
@@ -31,6 +45,12 @@ type NodeCompiler interface {
 // Compiler orchestrates the translation of a full Graph
 type Compiler struct {
 	compilers map[string]NodeCompiler
+}
+
+// CompileOptions controls per-execution orchestration behavior for the graph
+// runtime that wraps compiled node agents.
+type CompileOptions struct {
+	MaxSteps int
 }
 
 // New constructs a compiler with an empty node-compiler registry.
@@ -48,31 +68,36 @@ func (c *Compiler) Register(nodeType string, nc NodeCompiler) {
 
 // Compile translates an entire validated graph into a runnable ADK agent.
 //
-// The method performs a graph-level pre-pass to derive output keys, toolbox
-// wiring, and control-flow branch targets before delegating node-specific work
-// to registered NodeCompilers.
+// The compiler materializes each execution node as a child ADK agent, then
+// wraps them in a custom root agent that walks the graph dynamically at run
+// time. That orchestration layer is what allows explicit cycles in the graph
+// while still reusing ADK agents for the leaf execution work.
 func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
+	return c.CompileWithOptions(g, CompileOptions{})
+}
+
+// CompileWithOptions mirrors Compile but allows the caller to override runtime
+// limits such as the maximum number of graph steps for a single execution.
+func (c *Compiler) CompileWithOptions(g graph.Graph, opts CompileOptions) (agent.Agent, error) {
 	fmt.Printf("[DEBUG] Starting compilation for graph: %s\n", g.Name)
 
-	// 1. Sort nodes topologically to ensure valid execution order
-	sorted, err := c.sortNodes(g)
-	if err != nil {
-		fmt.Printf("[DEBUG] Sort failed: %v\n", err)
-		return nil, fmt.Errorf("graph validation failed: %w", err)
-	}
-	fmt.Printf("[DEBUG] Topologically sorted %d nodes\n", len(sorted))
-
-	// 2. Pre-pass: Identify data flow state keys and toolset connections
 	outputMappings := make(map[string][]string)
 	toolsetMappings := make(map[string][]tool.Toolset)
 	toolboxResults := make(map[string][]tool.Toolset)
 	trueAgentMappings := make(map[string]string)
 	falseAgentMappings := make(map[string]string)
+	staticNextMappings := make(map[string]string)
 	outputNodeKeys := make(map[string]string)
 	nodeByID := make(map[string]graph.Node, len(g.Nodes))
+	agentNameToNodeID := make(map[string]string)
+	startNodeID := ""
 
 	for _, node := range g.Nodes {
 		nodeByID[node.ID] = node
+
+		if name, ok := node.AgentName(); ok {
+			agentNameToNodeID[name] = node.ID
+		}
 
 		if node.Type != "output_node" {
 			continue
@@ -87,16 +112,47 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 	}
 
 	for _, edge := range g.Edges {
-		if isToolboxEdge(edge) {
+		sourceNode, sourceOK := nodeByID[edge.Source]
+		targetNode, targetOK := nodeByID[edge.Target]
+		if !sourceOK || !targetOK || isToolboxEdge(edge) {
 			continue
 		}
 
-		outputKey := edge.TargetPort
-		if mappedKey, ok := outputNodeKeys[edge.Target]; ok {
-			outputKey = mappedKey
+		if targetNode.Type == "output_node" {
+			if outputKey, ok := outputNodeKeys[targetNode.ID]; ok {
+				outputMappings[sourceNode.ID] = append(outputMappings[sourceNode.ID], outputKey)
+			}
+			continue
 		}
 
-		outputMappings[edge.Source] = append(outputMappings[edge.Source], outputKey)
+		if sourceNode.Type == "input_node" {
+			if !isExecutionNode(targetNode) {
+				return nil, fmt.Errorf("input edge %s targets non-execution node %s", edge.ID, targetNode.ID)
+			}
+			if startNodeID != "" && startNodeID != targetNode.ID {
+				return nil, fmt.Errorf("graph must have exactly one entry execution node")
+			}
+			startNodeID = targetNode.ID
+			continue
+		}
+
+		if sourceNode.Type == "if_else_node" {
+			continue
+		}
+
+		if !isExecutionNode(sourceNode) {
+			continue
+		}
+
+		if !isExecutionNode(targetNode) {
+			return nil, fmt.Errorf("edge %s targets non-execution node %s", edge.ID, targetNode.ID)
+		}
+
+		if existing, ok := staticNextMappings[sourceNode.ID]; ok && existing != targetNode.ID {
+			return nil, fmt.Errorf("node %s has multiple execution successors", sourceNode.ID)
+		}
+
+		staticNextMappings[sourceNode.ID] = targetNode.ID
 	}
 
 	for _, edge := range g.Edges {
@@ -122,14 +178,17 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 		}
 	}
 
-	// 3. First Pass: Compile toolbox nodes
+	if startNodeID == "" {
+		return nil, fmt.Errorf("graph has no entry execution node")
+	}
+
+	// 1. Compile toolbox nodes so their toolsets can be attached to LLM nodes.
 	for _, node := range g.Nodes {
 		if node.Type == "toolbox" {
 			fmt.Printf("[DEBUG] Compiling toolbox node: %s\n", node.ID)
 			nc, ok := c.compilers[node.Type]
 			if !ok {
-				fmt.Printf("[DEBUG] No compiler for node type: %s\n", node.Type)
-				continue
+				return nil, fmt.Errorf("no compiler registered for toolbox node type %s", node.Type)
 			}
 
 			res, err := nc.Compile(node, nil)
@@ -143,7 +202,7 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 		}
 	}
 
-	// 4. Map toolsets to LLM nodes
+	// 2. Attach compiled toolsets to the LLM nodes they feed.
 	for _, edge := range g.Edges {
 		if isToolboxEdge(edge) {
 			if toolsets, ok := toolboxResults[edge.Source]; ok {
@@ -153,10 +212,12 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 		}
 	}
 
-	// 5. Second Pass: Compile execution nodes (LLM, If/Else, etc.)
-	var agents []agent.Agent
-	for _, node := range sorted {
-		if node.Type == "toolbox" || node.Type == "input_node" || node.Type == "output_node" {
+	// 3. Compile execution nodes into child agents the graph runtime can call.
+	compiledNodes := make(map[string]compiledExecutionNode)
+	var subAgents []agent.Agent
+
+	for _, node := range g.Nodes {
+		if !isExecutionNode(node) {
 			fmt.Printf("[DEBUG] Skipping node %s during execution pass (type: %s)\n", node.ID, node.Type)
 			continue
 		}
@@ -164,12 +225,12 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 		fmt.Printf("[DEBUG] Compiling execution node: %s (type: %s)\n", node.ID, node.Type)
 		nc, ok := c.compilers[node.Type]
 		if !ok {
-			fmt.Printf("[DEBUG] WARNING: No compiler registered for node type: %s\n", node.Type)
-			continue
+			return nil, fmt.Errorf("no compiler registered for node type %s", node.Type)
 		}
 
 		metadata := map[string]interface{}{
 			"output_keys": outputMappings[node.ID],
+			"state_key":   defaultStateKey(node),
 			"toolsets":    toolsetMappings[node.ID],
 			"true_agent":  trueAgentMappings[node.ID],
 			"false_agent": falseAgentMappings[node.ID],
@@ -181,75 +242,45 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 			return nil, fmt.Errorf("failed to compile node %s: %w", node.ID, err)
 		}
 
-		if a, ok := res.(agent.Agent); ok {
-			agents = append(agents, a)
-			fmt.Printf("[DEBUG] Node %s compiled to agent successfully\n", node.ID)
-		} else {
-			fmt.Printf("[DEBUG] WARNING: Node %s did not produce an agent.Agent\n", node.ID)
+		a, ok := res.(agent.Agent)
+		if !ok {
+			return nil, fmt.Errorf("node %s did not produce an agent.Agent", node.ID)
 		}
+
+		compiledNodes[node.ID] = compiledExecutionNode{
+			id:         node.ID,
+			nodeType:   node.Type,
+			agent:      a,
+			nextNodeID: staticNextMappings[node.ID],
+			stateKey:   defaultStateKey(node),
+			outputKeys: outputMappings[node.ID],
+		}
+		subAgents = append(subAgents, a)
+		fmt.Printf("[DEBUG] Node %s compiled to agent successfully\n", node.ID)
 	}
 
-	// 6. Wrap in a SequentialAgent
-	if len(agents) == 0 {
+	if len(compiledNodes) == 0 {
 		fmt.Printf("[DEBUG] No execution agents found in graph\n")
 		return nil, fmt.Errorf("no execution nodes found in graph")
 	}
 
-	if len(agents) == 1 {
-		fmt.Printf("[DEBUG] Returning single agent for graph\n")
-		return agents[0], nil
+	maxSteps := opts.MaxSteps
+	if maxSteps <= 0 {
+		maxSteps = maxInt(len(compiledNodes)*32, 512)
 	}
 
-	fmt.Printf("[DEBUG] Wrapping %d agents in SequentialAgent\n", len(agents))
-	return sequentialagent.New(sequentialagent.Config{
-		AgentConfig: agent.Config{
-			Name:      g.Name,
-			SubAgents: agents,
-		},
-	})
+	fmt.Printf("[DEBUG] Building graph runtime with %d execution agents\n", len(compiledNodes))
+	return newGraphRuntimeAgent(g.Name, compiledGraph{
+		startNodeID:       startNodeID,
+		nodes:             compiledNodes,
+		agentNameToNodeID: agentNameToNodeID,
+		maxSteps:          maxSteps,
+	}, subAgents)
 }
 
-// sortNodes performs a topological sort over the graph so execution nodes are
-// compiled in dependency order and cycles are rejected up front.
-func (c *Compiler) sortNodes(g graph.Graph) ([]graph.Node, error) {
-	adj := make(map[string][]string)
-	inDegree := make(map[string]int)
-	nodeMap := make(map[string]graph.Node)
-
-	for _, node := range g.Nodes {
-		inDegree[node.ID] = 0
-		nodeMap[node.ID] = node
+func maxInt(a, b int) int {
+	if a > b {
+		return a
 	}
-
-	for _, edge := range g.Edges {
-		adj[edge.Source] = append(adj[edge.Source], edge.Target)
-		inDegree[edge.Target]++
-	}
-
-	var queue []string
-	for id, degree := range inDegree {
-		if degree == 0 {
-			queue = append(queue, id)
-		}
-	}
-
-	var sorted []graph.Node
-	for len(queue) > 0 {
-		u := queue[0]
-		queue = queue[1:]
-		sorted = append(sorted, nodeMap[u])
-
-		for _, v := range adj[u] {
-			inDegree[v]--
-			if inDegree[v] == 0 {
-				queue = append(queue, v)
-			}
-		}
-	}
-
-	if len(sorted) != len(g.Nodes) {
-		return nil, fmt.Errorf("cycle detected in graph")
-	}
-
-	return sorted, nil
+	return b
 }

@@ -72,7 +72,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   onConnect: (connection: Connection) => {
-    // Ports encode a logical data type prefix such as "message" or "logic".
+    // Ports encode a coarse edge family such as "message" or "toolbox_handle".
     // For branch handles the suffix after ":" identifies the branch name, so
     // only the prefix participates in compatibility checks.
     const sourceType = connection.sourceHandle?.split(':')[0];
@@ -124,7 +124,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         config = { name: 'final_output', output_key: 'result', format: 'message' };
         break;
       case 'if_else_node':
-        config = { condition_language: 'CEL', condition: 'state.category == "billing"' };
+        config = { condition_language: 'CEL', condition: 'state.analyze.status == "pass"' };
         break;
     }
 

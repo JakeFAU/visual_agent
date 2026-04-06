@@ -25,8 +25,15 @@ export const IfElseNode = memo(({ data, selected }: NodeProps<{ config: IfElseNo
       <Handle
         type="target"
         position={Position.Left}
+        id="message"
+        className="w-2 h-2 !bg-green-500 border-2 border-gray-800"
+        style={{ left: -4 }}
+      />
+      <Handle
+        type="target"
+        position={Position.Left}
         id="logic"
-        className="w-2 h-2 !bg-blue-500 border-2 border-gray-800"
+        className="w-2 h-2 !bg-transparent border-0 opacity-0 pointer-events-none"
         style={{ left: -4 }}
       />
 
@@ -42,6 +49,20 @@ export const IfElseNode = memo(({ data, selected }: NodeProps<{ config: IfElseNo
         position={Position.Right}
         id="message:false"
         className="w-2 h-2 !bg-red-500 border-2 border-gray-800"
+        style={{ right: -4, top: '98px' }}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="out_true"
+        className="w-2 h-2 !bg-transparent border-0 opacity-0 pointer-events-none"
+        style={{ right: -4, top: '78px' }}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="out_false"
+        className="w-2 h-2 !bg-transparent border-0 opacity-0 pointer-events-none"
         style={{ right: -4, top: '98px' }}
       />
     </div>

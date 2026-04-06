@@ -7,15 +7,25 @@ interface LogEntry {
   timestamp: Date;
 }
 
+interface RuntimeStats {
+  steps: number;
+  elapsedMs: number;
+  totalTokens: number;
+  currentNode: string | null;
+  exitReason: string | null;
+  nodeVisits: Record<string, number>;
+}
+
 interface LogPanelProps {
   logs: LogEntry[];
   response: string | null;
+  stats: RuntimeStats | null;
   isOpen: boolean;
   onToggle: () => void;
   onClear: () => void;
 }
 
-export const LogPanel: React.FC<LogPanelProps> = ({ logs, response, isOpen, onToggle, onClear }) => {
+export const LogPanel: React.FC<LogPanelProps> = ({ logs, response, stats, isOpen, onToggle, onClear }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,6 +55,41 @@ export const LogPanel: React.FC<LogPanelProps> = ({ logs, response, isOpen, onTo
 
       {isOpen && (
         <div ref={scrollRef} className="h-[calc(100%-40px)] overflow-y-auto p-4 font-mono text-[11px] space-y-1 custom-scrollbar">
+          {stats && (
+            <div className="mb-4 rounded border border-blue-500/20 bg-blue-950/10 p-3">
+              <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-blue-400">Run Diagnostics</div>
+              <div className="grid grid-cols-2 gap-2 font-sans text-xs text-gray-300 xl:grid-cols-5">
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest text-gray-500">Steps</div>
+                  <div className="text-sm text-white">{stats.steps}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest text-gray-500">Tokens</div>
+                  <div className="text-sm text-white">{stats.totalTokens}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest text-gray-500">Elapsed</div>
+                  <div className="text-sm text-white">{formatElapsed(stats.elapsedMs)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest text-gray-500">Current Node</div>
+                  <div className="truncate text-sm text-white">{stats.currentNode || 'idle'}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest text-gray-500">Exit</div>
+                  <div className="truncate text-sm text-white">{stats.exitReason || 'running'}</div>
+                </div>
+              </div>
+              {Object.keys(stats.nodeVisits).length > 0 && (
+                <div className="mt-3 text-xs text-gray-400">
+                  Visits: {Object.entries(stats.nodeVisits)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([node, visits]) => `${node} x${visits}`)
+                    .join(', ')}
+                </div>
+              )}
+            </div>
+          )}
           {response && (
             <div className="mb-4 rounded border border-green-500/20 bg-green-950/20 p-3">
               <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-green-400">Final Response</div>
@@ -56,6 +101,8 @@ export const LogPanel: React.FC<LogPanelProps> = ({ logs, response, isOpen, onTo
               <span className="text-gray-600 shrink-0">[{log.timestamp.toLocaleTimeString()}]</span>
               <span className={`font-bold shrink-0 w-24 uppercase ${
                 log.type === 'error' ? 'text-red-500' : 
+                log.type === 'step' ? 'text-amber-400' :
+                log.type === 'route' ? 'text-cyan-400' :
                 log.type === 'done' ? 'text-green-500' : 'text-blue-400'
               }`}>
                 {log.type}
@@ -74,4 +121,11 @@ export const LogPanel: React.FC<LogPanelProps> = ({ logs, response, isOpen, onTo
       )}
     </div>
   );
+};
+
+const formatElapsed = (elapsedMs: number) => {
+  if (elapsedMs < 1000) {
+    return `${elapsedMs} ms`;
+  }
+  return `${(elapsedMs / 1000).toFixed(1)} s`;
 };

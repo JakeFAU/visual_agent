@@ -41,8 +41,22 @@ export const LLMNode = memo(({ data, selected }: NodeProps<{ config: LLMNodeConf
       <Handle
         type="target"
         position={Position.Left}
+        id="in_message"
+        className="w-2 h-2 !bg-transparent border-0 opacity-0 pointer-events-none"
+        style={{ left: -4, top: '62px' }}
+      />
+      <Handle
+        type="target"
+        position={Position.Left}
         id="toolbox_handle"
         className="w-2 h-2 !bg-amber-500 border-2 border-gray-800"
+        style={{ left: -4, top: '86px' }}
+      />
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="in_toolbox"
+        className="w-2 h-2 !bg-transparent border-0 opacity-0 pointer-events-none"
         style={{ left: -4, top: '86px' }}
       />
 
@@ -50,8 +64,22 @@ export const LLMNode = memo(({ data, selected }: NodeProps<{ config: LLMNodeConf
       <Handle
         type="source"
         position={Position.Right}
-        id={isStructured ? "structured_output" : "message"}
+        id="message"
         className={`w-2 h-2 border-2 border-gray-800 ${isStructured ? '!bg-purple-500' : '!bg-green-500'}`}
+        style={{ right: -4, top: '118px' }}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="structured_output"
+        className="w-2 h-2 !bg-transparent border-0 opacity-0 pointer-events-none"
+        style={{ right: -4, top: '118px' }}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="out_message"
+        className="w-2 h-2 !bg-transparent border-0 opacity-0 pointer-events-none"
         style={{ right: -4, top: '118px' }}
       />
     </div>

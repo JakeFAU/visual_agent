@@ -150,7 +150,7 @@ export const SidePanel: React.FC = () => {
                         value={config.condition}
                         onChange={(e) => handleChange('condition', e.target.value)}
                         className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 h-24 resize-none"
-                        placeholder="e.g. state.category == 'billing'"
+                        placeholder="e.g. state.analyze.status == 'pass'"
                     />
                 </div>
             </div>
