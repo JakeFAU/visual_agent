@@ -30,7 +30,7 @@ export const ToolboxNode = memo(({ data, selected }: NodeProps<{ config: Toolbox
       <Handle
         type="source"
         position={Position.Right}
-        id="toolbox_handle"
+        id="toolbox:out"
         className="w-2 h-2 !bg-amber-500 border-2 border-gray-800"
         style={{ right: -4 }}
       />

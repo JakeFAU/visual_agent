@@ -5,6 +5,14 @@ const PositionSchema = z.object({
   y: z.number(),
 });
 
+const BaseNodeFields = {
+  id: z.string(),
+  position: PositionSchema,
+  parent_id: z.string().optional(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+};
+
 const InputNodeConfigSchema = z.object({
   name: z.string(),
   description: z.string(),
@@ -49,36 +57,41 @@ const IfElseNodeConfigSchema = z.object({
   condition: z.string(),
 });
 
+const WhileNodeConfigSchema = z.object({
+  condition: z.string(),
+  max_iterations: z.number().int().positive(),
+});
+
 const NodeSchema = z.discriminatedUnion("type", [
   z.object({
-    id: z.string(),
+    ...BaseNodeFields,
     type: z.literal("input_node"),
-    position: PositionSchema,
     config: InputNodeConfigSchema,
   }),
   z.object({
-    id: z.string(),
+    ...BaseNodeFields,
     type: z.literal("llm_node"),
-    position: PositionSchema,
     config: LLMNodeConfigSchema,
   }),
   z.object({
-    id: z.string(),
+    ...BaseNodeFields,
     type: z.literal("output_node"),
-    position: PositionSchema,
     config: OutputNodeConfigSchema,
   }),
   z.object({
-    id: z.string(),
+    ...BaseNodeFields,
     type: z.literal("toolbox"),
-    position: PositionSchema,
     config: ToolboxNodeConfigSchema,
   }),
   z.object({
-    id: z.string(),
+    ...BaseNodeFields,
     type: z.literal("if_else_node"),
-    position: PositionSchema,
     config: IfElseNodeConfigSchema,
+  }),
+  z.object({
+    ...BaseNodeFields,
+    type: z.literal("while_node"),
+    config: WhileNodeConfigSchema,
   }),
 ]);
 
@@ -108,3 +121,4 @@ export type LLMNodeConfig = z.infer<typeof LLMNodeConfigSchema>;
 export type OutputNodeConfig = z.infer<typeof OutputNodeConfigSchema>;
 export type ToolboxNodeConfig = z.infer<typeof ToolboxNodeConfigSchema>;
 export type IfElseNodeConfig = z.infer<typeof IfElseNodeConfigSchema>;
+export type WhileNodeConfig = z.infer<typeof WhileNodeConfigSchema>;

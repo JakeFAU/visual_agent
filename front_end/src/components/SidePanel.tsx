@@ -155,6 +155,42 @@ export const SidePanel: React.FC = () => {
                 </div>
             </div>
         )}
+
+        {selectedNode.type === 'while_node' && (
+            <div className="space-y-4">
+                <div className="rounded border border-rose-900/60 bg-rose-950/20 p-3 text-[11px] text-rose-100/80">
+                    This container owns its loop policy. Nodes placed inside it visually define the loop body, while the header controls still apply as run-wide budgets.
+                </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Language</label>
+                    <div className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white">
+                        Common Expression Language (CEL)
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Condition</label>
+                    <textarea
+                        value={config.condition}
+                        onChange={(e) => handleChange('condition', e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white font-mono focus:outline-none focus:ring-1 focus:ring-rose-500 h-24 resize-none"
+                        placeholder="e.g. state.review.status != 'pass' || iteration < 2"
+                    />
+                    <div className="text-[10px] text-gray-500">
+                        Available variables: <span className="font-mono text-gray-300">state</span>, <span className="font-mono text-gray-300">iteration</span>, <span className="font-mono text-gray-300">max_iterations</span>
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Max Iterations</label>
+                    <input
+                        type="number"
+                        min="1"
+                        value={config.max_iterations}
+                        onChange={(e) => handleChange('max_iterations', Math.max(1, Number.parseInt(e.target.value || '1', 10) || 1))}
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-rose-500"
+                    />
+                </div>
+            </div>
+        )}
       </div>
     </div>
   );

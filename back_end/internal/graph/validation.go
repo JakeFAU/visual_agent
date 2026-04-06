@@ -62,6 +62,28 @@ func (g Graph) Validate() error {
 		}
 	}
 
+	for _, node := range g.Nodes {
+		if node.ParentID == "" {
+			continue
+		}
+		if node.ParentID == node.ID {
+			return fmt.Errorf("node %q cannot be its own parent", node.ID)
+		}
+		parent, ok := nodeIDs[node.ParentID]
+		if !ok {
+			return fmt.Errorf("node %q references unknown parent node %q", node.ID, node.ParentID)
+		}
+		if parent.Type != "while_node" {
+			return fmt.Errorf("node %q can only be parented under a while_node container", node.ID)
+		}
+		if node.Type == "input_node" {
+			return fmt.Errorf("input node %q cannot live inside a while_node container", node.ID)
+		}
+		if err := validateParentChain(node, nodeIDs); err != nil {
+			return err
+		}
+	}
+
 	for _, edge := range g.Edges {
 		if strings.TrimSpace(edge.ID) == "" {
 			return fmt.Errorf("edge id cannot be empty")
@@ -144,6 +166,28 @@ func (g Graph) Validate() error {
 			if trueCount != 1 || falseCount != 1 {
 				return fmt.Errorf("if_else node %q must define exactly one true branch and one false branch", node.ID)
 			}
+		case "while_node":
+			var loopCount, doneCount int
+			for _, edge := range outgoing[node.ID] {
+				target := nodeIDs[edge.Target]
+				switch edge.SourcePort {
+				case "message:loop", "out_loop":
+					if !isExecutionNode(target) {
+						return fmt.Errorf("while node %q loop branch must target an execution node", node.ID)
+					}
+					loopCount++
+				case "message:done", "out_done":
+					if !isExecutionNode(target) && target.Type != "output_node" {
+						return fmt.Errorf("while node %q done branch must target an execution node or output node", node.ID)
+					}
+					doneCount++
+				default:
+					return fmt.Errorf("while node %q only supports loop/done outputs", node.ID)
+				}
+			}
+			if loopCount != 1 || doneCount != 1 {
+				return fmt.Errorf("while node %q must define exactly one loop branch and one done branch", node.ID)
+			}
 		case "output_node":
 			if len(outgoing[node.ID]) != 0 {
 				return fmt.Errorf("output node %q cannot have outgoing edges", node.ID)
@@ -151,9 +195,19 @@ func (g Graph) Validate() error {
 			if len(incoming[node.ID]) != 1 {
 				return fmt.Errorf("output node %q must have exactly one incoming edge", node.ID)
 			}
-			source := nodeIDs[incoming[node.ID][0].Source]
-			if source.Type != "llm_node" {
-				return fmt.Errorf("output node %q must be driven by an llm_node", node.ID)
+			incomingEdge := incoming[node.ID][0]
+			source := nodeIDs[incomingEdge.Source]
+			switch source.Type {
+			case "llm_node":
+			case "while_node":
+				if !isWhileDoneEdge(incomingEdge) {
+					return fmt.Errorf("output node %q must be driven by a while_node done branch", node.ID)
+				}
+				if countWhileDoneProducers(source.ID, nodeIDs, incoming) == 0 {
+					return fmt.Errorf("output node %q must be backed by at least one execution node feeding the while container output", node.ID)
+				}
+			default:
+				return fmt.Errorf("output node %q must be driven by an llm_node or while_node", node.ID)
 			}
 		case "toolbox":
 			if len(incoming[node.ID]) != 0 {
@@ -176,6 +230,26 @@ func (g Graph) Validate() error {
 		if !reachable[node.ID] {
 			return fmt.Errorf("execution node %q is unreachable from the input node", node.ID)
 		}
+	}
+
+	return nil
+}
+
+func validateParentChain(node Node, nodeIDs map[string]Node) error {
+	seen := map[string]bool{node.ID: true}
+	currentParentID := node.ParentID
+
+	for currentParentID != "" {
+		if seen[currentParentID] {
+			return fmt.Errorf("node %q participates in a parent cycle", node.ID)
+		}
+		seen[currentParentID] = true
+
+		parent, ok := nodeIDs[currentParentID]
+		if !ok {
+			return fmt.Errorf("node %q references unknown parent node %q", node.ID, currentParentID)
+		}
+		currentParentID = parent.ParentID
 	}
 
 	return nil
@@ -238,7 +312,12 @@ func (n Node) Validate() error {
 			return fmt.Errorf("condition cannot be empty")
 		}
 	case WhileNodeConfig:
-		return fmt.Errorf("while_node is not supported in v0")
+		if strings.TrimSpace(cfg.Condition) == "" {
+			return fmt.Errorf("condition cannot be empty")
+		}
+		if cfg.MaxIterations <= 0 {
+			return fmt.Errorf("max_iterations must be greater than zero")
+		}
 	default:
 		return fmt.Errorf("unsupported config type %T", n.Config)
 	}
@@ -256,6 +335,29 @@ func isToolboxConnection(edge Edge, source, target Node) bool {
 		return false
 	}
 	return (edge.TargetPort == "toolbox_handle" || edge.TargetPort == "in_toolbox") && target.Type == "llm_node"
+}
+
+func isWhileDoneEdge(edge Edge) bool {
+	return edge.SourcePort == "message:done" || edge.SourcePort == "out_done"
+}
+
+func isWhileDoneTarget(edge Edge) bool {
+	return edge.TargetPort == "message:done" || edge.TargetPort == "out_done"
+}
+
+func countWhileDoneProducers(whileNodeID string, nodeIDs map[string]Node, incoming map[string][]Edge) int {
+	count := 0
+	for _, edge := range incoming[whileNodeID] {
+		source, ok := nodeIDs[edge.Source]
+		if !ok {
+			continue
+		}
+		if !isExecutionNode(source) || !isWhileDoneTarget(edge) {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 func walkReachableExecutionNodes(inputNodeID string, nodeIDs map[string]Node, outgoing map[string][]Edge) map[string]bool {

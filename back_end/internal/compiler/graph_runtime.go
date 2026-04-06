@@ -23,12 +23,13 @@ type compiledGraph struct {
 }
 
 type compiledExecutionNode struct {
-	id         string
-	nodeType   string
-	agent      agent.Agent
-	nextNodeID string
-	stateKey   string
-	outputKeys []string
+	id                      string
+	nodeType                string
+	agent                   agent.Agent
+	nextNodeID              string
+	stateKey                string
+	outputKeys              []string
+	allowTerminalNoTransfer bool
 }
 
 func newGraphRuntimeAgent(name string, graph compiledGraph, subAgents []agent.Agent) (agent.Agent, error) {
@@ -135,8 +136,12 @@ func (g compiledGraph) nextNodeID(node compiledExecutionNode, transferTarget str
 		return nextNodeID, nil
 	}
 
-	if node.nodeType == "if_else_node" {
-		return "", fmt.Errorf("if_else node %q did not choose a branch", node.id)
+	if node.nodeType == "while_node" && node.allowTerminalNoTransfer {
+		return "", nil
+	}
+
+	if node.nodeType == "if_else_node" || node.nodeType == "while_node" {
+		return "", fmt.Errorf("%s %q did not choose a branch", node.nodeType, node.id)
 	}
 
 	return node.nextNodeID, nil
@@ -208,6 +213,9 @@ func graphRuntimeDiagnosticEvent(ctx agent.InvocationContext, payload map[string
 func transitionReason(node compiledExecutionNode, transferTarget string) string {
 	if transferTarget != "" && node.nodeType == "if_else_node" {
 		return "branch"
+	}
+	if transferTarget != "" && node.nodeType == "while_node" {
+		return "loop_control"
 	}
 	if transferTarget != "" {
 		return "transfer"

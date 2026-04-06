@@ -22,9 +22,33 @@ func isIfElseFalseEdge(edge graph.Edge) bool {
 	return edge.SourcePort == "message:false" || edge.SourcePort == "out_false"
 }
 
+func isWhileLoopEdge(edge graph.Edge) bool {
+	return edge.SourcePort == "message:loop" || edge.SourcePort == "out_loop"
+}
+
+func isWhileDoneEdge(edge graph.Edge) bool {
+	return edge.SourcePort == "message:done" || edge.SourcePort == "out_done"
+}
+
+func isWhileDoneTarget(edge graph.Edge) bool {
+	return edge.TargetPort == "message:done" || edge.TargetPort == "out_done"
+}
+
 func isExecutionNode(node graph.Node) bool {
 	_, ok := node.AgentName()
 	return ok
+}
+
+func appendUnique(values []string, candidate string) []string {
+	if candidate == "" {
+		return values
+	}
+	for _, existing := range values {
+		if existing == candidate {
+			return values
+		}
+	}
+	return append(values, candidate)
 }
 
 func defaultStateKey(node graph.Node) string {
@@ -86,7 +110,12 @@ func (c *Compiler) CompileWithOptions(g graph.Graph, opts CompileOptions) (agent
 	toolboxResults := make(map[string][]tool.Toolset)
 	trueAgentMappings := make(map[string]string)
 	falseAgentMappings := make(map[string]string)
+	loopAgentMappings := make(map[string]string)
+	doneAgentMappings := make(map[string]string)
+	doneTerminalMappings := make(map[string]bool)
 	staticNextMappings := make(map[string]string)
+	whileDoneProducerMappings := make(map[string][]string)
+	whileOutputKeyMappings := make(map[string][]string)
 	outputNodeKeys := make(map[string]string)
 	nodeByID := make(map[string]graph.Node, len(g.Nodes))
 	agentNameToNodeID := make(map[string]string)
@@ -118,9 +147,17 @@ func (c *Compiler) CompileWithOptions(g graph.Graph, opts CompileOptions) (agent
 			continue
 		}
 
+		if targetNode.Type == "while_node" && isExecutionNode(sourceNode) && isWhileDoneTarget(edge) {
+			whileDoneProducerMappings[targetNode.ID] = appendUnique(whileDoneProducerMappings[targetNode.ID], sourceNode.ID)
+		}
+
 		if targetNode.Type == "output_node" {
 			if outputKey, ok := outputNodeKeys[targetNode.ID]; ok {
-				outputMappings[sourceNode.ID] = append(outputMappings[sourceNode.ID], outputKey)
+				if sourceNode.Type == "while_node" {
+					whileOutputKeyMappings[sourceNode.ID] = appendUnique(whileOutputKeyMappings[sourceNode.ID], outputKey)
+				} else {
+					outputMappings[sourceNode.ID] = appendUnique(outputMappings[sourceNode.ID], outputKey)
+				}
 			}
 			continue
 		}
@@ -136,7 +173,7 @@ func (c *Compiler) CompileWithOptions(g graph.Graph, opts CompileOptions) (agent
 			continue
 		}
 
-		if sourceNode.Type == "if_else_node" {
+		if sourceNode.Type == "if_else_node" || sourceNode.Type == "while_node" {
 			continue
 		}
 
@@ -155,9 +192,26 @@ func (c *Compiler) CompileWithOptions(g graph.Graph, opts CompileOptions) (agent
 		staticNextMappings[sourceNode.ID] = targetNode.ID
 	}
 
+	for whileNodeID, outputKeys := range whileOutputKeyMappings {
+		producerIDs := whileDoneProducerMappings[whileNodeID]
+		if len(producerIDs) == 0 {
+			return nil, fmt.Errorf("while node %s routes to an output node but has no execution producer wired to its done boundary", whileNodeID)
+		}
+		for _, producerID := range producerIDs {
+			for _, outputKey := range outputKeys {
+				outputMappings[producerID] = appendUnique(outputMappings[producerID], outputKey)
+			}
+		}
+	}
+
 	for _, edge := range g.Edges {
-		if !isIfElseTrueEdge(edge) && !isIfElseFalseEdge(edge) {
+		if !isIfElseTrueEdge(edge) && !isIfElseFalseEdge(edge) && !isWhileLoopEdge(edge) && !isWhileDoneEdge(edge) {
 			continue
+		}
+
+		sourceNode, ok := nodeByID[edge.Source]
+		if !ok {
+			return nil, fmt.Errorf("edge %s references unknown source node %s", edge.ID, edge.Source)
 		}
 
 		targetNode, ok := nodeByID[edge.Target]
@@ -165,16 +219,37 @@ func (c *Compiler) CompileWithOptions(g graph.Graph, opts CompileOptions) (agent
 			return nil, fmt.Errorf("edge %s references unknown target node %s", edge.ID, edge.Target)
 		}
 
-		targetAgentName, ok := targetNode.AgentName()
-		if !ok {
-			return nil, fmt.Errorf("if_else edge %s targets non-execution node %s", edge.ID, edge.Target)
-		}
-
 		if isIfElseTrueEdge(edge) {
+			targetAgentName, ok := targetNode.AgentName()
+			if !ok {
+				return nil, fmt.Errorf("if_else edge %s targets non-execution node %s", edge.ID, edge.Target)
+			}
 			trueAgentMappings[edge.Source] = targetAgentName
 		}
 		if isIfElseFalseEdge(edge) {
+			targetAgentName, ok := targetNode.AgentName()
+			if !ok {
+				return nil, fmt.Errorf("if_else edge %s targets non-execution node %s", edge.ID, edge.Target)
+			}
 			falseAgentMappings[edge.Source] = targetAgentName
+		}
+		if sourceNode.Type == "while_node" && isWhileLoopEdge(edge) {
+			targetAgentName, ok := targetNode.AgentName()
+			if !ok {
+				return nil, fmt.Errorf("while edge %s targets non-execution node %s", edge.ID, edge.Target)
+			}
+			loopAgentMappings[edge.Source] = targetAgentName
+		}
+		if sourceNode.Type == "while_node" && isWhileDoneEdge(edge) {
+			if targetNode.Type == "output_node" {
+				doneTerminalMappings[edge.Source] = true
+				continue
+			}
+			targetAgentName, ok := targetNode.AgentName()
+			if !ok {
+				return nil, fmt.Errorf("while edge %s targets non-execution node %s", edge.ID, edge.Target)
+			}
+			doneAgentMappings[edge.Source] = targetAgentName
 		}
 	}
 
@@ -229,11 +304,14 @@ func (c *Compiler) CompileWithOptions(g graph.Graph, opts CompileOptions) (agent
 		}
 
 		metadata := map[string]interface{}{
-			"output_keys": outputMappings[node.ID],
-			"state_key":   defaultStateKey(node),
-			"toolsets":    toolsetMappings[node.ID],
-			"true_agent":  trueAgentMappings[node.ID],
-			"false_agent": falseAgentMappings[node.ID],
+			"output_keys":   outputMappings[node.ID],
+			"state_key":     defaultStateKey(node),
+			"toolsets":      toolsetMappings[node.ID],
+			"true_agent":    trueAgentMappings[node.ID],
+			"false_agent":   falseAgentMappings[node.ID],
+			"loop_agent":    loopAgentMappings[node.ID],
+			"done_agent":    doneAgentMappings[node.ID],
+			"done_terminal": doneTerminalMappings[node.ID],
 		}
 
 		res, err := nc.Compile(node, metadata)
@@ -248,12 +326,13 @@ func (c *Compiler) CompileWithOptions(g graph.Graph, opts CompileOptions) (agent
 		}
 
 		compiledNodes[node.ID] = compiledExecutionNode{
-			id:         node.ID,
-			nodeType:   node.Type,
-			agent:      a,
-			nextNodeID: staticNextMappings[node.ID],
-			stateKey:   defaultStateKey(node),
-			outputKeys: outputMappings[node.ID],
+			id:                      node.ID,
+			nodeType:                node.Type,
+			agent:                   a,
+			nextNodeID:              staticNextMappings[node.ID],
+			stateKey:                defaultStateKey(node),
+			outputKeys:              outputMappings[node.ID],
+			allowTerminalNoTransfer: doneTerminalMappings[node.ID],
 		}
 		subAgents = append(subAgents, a)
 		fmt.Printf("[DEBUG] Node %s compiled to agent successfully\n", node.ID)

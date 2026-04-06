@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare, Cpu, Briefcase, Play, Split } from 'lucide-react';
+import { MessageSquare, Cpu, Briefcase, Play, Repeat, Split } from 'lucide-react';
 
 const NODE_TYPES = [
   { type: 'input_node', label: 'Input', icon: <MessageSquare size={16} />, color: 'bg-green-500' },
@@ -7,6 +7,7 @@ const NODE_TYPES = [
   { type: 'toolbox', label: 'Toolbox', icon: <Briefcase size={16} />, color: 'bg-amber-500' },
   { type: 'output_node', label: 'Output', icon: <Play size={16} />, color: 'bg-gray-500' },
   { type: 'if_else_node', label: 'If / Else', icon: <Split size={16} />, color: 'bg-purple-500' },
+  { type: 'while_node', label: 'While Container', icon: <Repeat size={16} />, color: 'bg-rose-500' },
 ];
 
 export const Palette: React.FC = () => {

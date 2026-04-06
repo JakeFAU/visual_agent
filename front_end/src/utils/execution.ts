@@ -27,6 +27,10 @@ const getParts = (content: any): any[] => {
   return Array.isArray(parts) ? parts : [];
 };
 
+const getTransferTarget = (content: any): string | null => {
+  return content?.Actions?.TransferToAgent ?? content?.actions?.transferToAgent ?? null;
+};
+
 export const getUsageSnapshot = (content: any): UsageSnapshot | null => {
   const usage = content?.UsageMetadata ?? content?.usageMetadata;
   if (!usage) {
@@ -90,6 +94,10 @@ export const extractDisplayContent = (event: ExecutionEvent, outputKeys: string[
   const partText = getTextFromParts(parts);
   if (partText) {
     return partText;
+  }
+
+  if (getTransferTarget(event.content) && (!stateDelta || Object.keys(stateDelta).length === 0)) {
+    return null;
   }
 
   if (stateDelta && Object.keys(stateDelta).length > 0) {

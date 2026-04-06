@@ -17,15 +17,8 @@ export const OutputNode = memo(({ data, selected }: NodeProps<{ config: OutputNo
       <Handle
         type="target"
         position={Position.Left}
-        id="message"
+        id="message:in"
         className="w-2 h-2 !bg-green-500 border-2 border-gray-800"
-        style={{ left: -4 }}
-      />
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="in_message"
-        className="w-2 h-2 !bg-transparent border-0 opacity-0 pointer-events-none"
         style={{ left: -4 }}
       />
     </div>
