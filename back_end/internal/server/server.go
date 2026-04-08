@@ -134,10 +134,8 @@ type ExecutionBudget struct {
 // Execute validates the submitted graph, compiles it, and streams execution
 // events back to the client using server-sent events.
 func (s *Server) Execute(c *gin.Context) {
-	fmt.Println("[DEBUG] Execute endpoint called")
 	var req ExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		fmt.Printf("[DEBUG] Bind JSON failed: %v\n", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -150,12 +148,10 @@ func (s *Server) Execute(c *gin.Context) {
 		return
 	}
 
-	fmt.Printf("[DEBUG] Compiling graph: %s\n", req.Graph.Name)
 	compiled, err := s.compiler.CompileWithOptions(req.Graph, compiler.CompileOptions{
 		MaxSteps: req.Budget.MaxSteps,
 	})
 	if err != nil {
-		fmt.Printf("[DEBUG] Compilation failed: %v\n", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("compilation failed: %v", err)})
 		return
 	}
@@ -171,18 +167,15 @@ func (s *Server) Execute(c *gin.Context) {
 	}
 	tracker := newExecutionTracker(req.Budget)
 
-	fmt.Println("[DEBUG] Starting SSE stream")
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no") // Prevent proxy buffering (Nginx)
 
 	c.Stream(func(_ io.Writer) bool {
-		fmt.Println("[DEBUG] Entering execution loop")
 		for event, err := range rt.Execute(execCtx, compiled, req.Input) {
 			if err != nil {
 				exitReason, message := tracker.errorPayload(execCtx, err)
-				fmt.Printf("[DEBUG] Execution error: %v\n", err)
 				writeSSE(c, gin.H{
 					"type":    "diagnostic",
 					"content": tracker.summary(exitReason),
@@ -200,7 +193,6 @@ func (s *Server) Execute(c *gin.Context) {
 					continue
 				}
 
-				fmt.Printf("[DEBUG] Sending event from author: %s\n", event.Author)
 				tracker.observeAgentEvent(event)
 				writeSSE(c, gin.H{
 					"type":    "agent_event",
@@ -221,7 +213,6 @@ func (s *Server) Execute(c *gin.Context) {
 				}
 			}
 		}
-		fmt.Println("[DEBUG] Execution loop finished, sending done")
 		writeSSE(c, gin.H{
 			"type":    "diagnostic",
 			"content": tracker.summary("completed"),

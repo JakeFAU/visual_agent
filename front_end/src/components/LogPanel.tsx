@@ -114,7 +114,7 @@ export const LogPanel: React.FC<LogPanelProps> = ({ logs, response, stats, isOpe
           ))}
           {logs.length === 0 && !response && (
             <div className="h-full flex items-center justify-center text-gray-600 italic">
-              No execution data. Click "Deploy" to start.
+              No execution data. Click "Run Workflow" to start.
             </div>
           )}
         </div>

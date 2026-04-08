@@ -58,7 +58,6 @@ export const executeGraph = async (
   budget: ExecuteBudget,
   onEvent: (ev: { type: string, content: any, author?: string }) => void,
 ) => {
-  console.log("[DEBUG] Starting executeGraph fetch...");
   const response = await fetch(`${API_BASE}/execute`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -72,8 +71,7 @@ export const executeGraph = async (
 
   const reader = response.body?.getReader();
   if (!reader) {
-    console.error("[DEBUG] No response body reader available");
-    return;
+    throw new Error('Execution stream did not include a readable response body');
   }
 
   const decoder = new TextDecoder();
@@ -82,8 +80,7 @@ export const executeGraph = async (
   const processLine = (line: string) => {
     const trimmed = line.trim();
     if (!trimmed) return;
-    
-    console.log("[DEBUG] SSE Raw Line:", trimmed);
+
     if (trimmed.startsWith('data:')) {
         try {
             // SSE frames arrive as "data: <json>", so only the payload after the
@@ -93,8 +90,8 @@ export const executeGraph = async (
                 const data = JSON.parse(jsonStr);
                 onEvent(data);
             }
-        } catch (e) {
-            console.warn("[DEBUG] Failed to parse SSE JSON:", trimmed, e);
+        } catch {
+            // Ignore malformed frames and continue consuming the stream.
         }
     }
   };
@@ -109,15 +106,13 @@ export const executeGraph = async (
       throw new Error(`Execution stream closed unexpectedly: ${message}`);
     }
     if (done) {
-        console.log("[DEBUG] Stream reader done. Remaining buffer:", buffer);
         if (buffer) {
             buffer.split('\n').forEach(processLine);
         }
         break;
     }
-    
+
     const chunk = decoder.decode(value, { stream: true });
-    console.log("[DEBUG] Received chunk length:", chunk.length);
     buffer += chunk;
     
     const lines = buffer.split('\n');

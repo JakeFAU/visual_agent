@@ -1,0 +1,61 @@
+{
+  "version": "1.0",
+  "name": "Simple Chat",
+  "nodes": [
+    {
+      "id": "input-1",
+      "type": "input_node",
+      "position": { "x": 40, "y": 160 },
+      "config": {
+        "name": "user_input",
+        "description": "Prompt entered by the operator."
+      }
+    },
+    {
+      "id": "assistant",
+      "type": "llm_node",
+      "position": { "x": 320, "y": 120 },
+      "config": {
+        "name": "assistant",
+        "description": "A single text-response assistant.",
+        "model": "gemini-2.5-flash",
+        "instruction": "Answer clearly and concisely. If the request is ambiguous, ask one clarifying question.",
+        "response_mode": "text",
+        "generate_content_config": {
+          "temperature": 0.4,
+          "max_output_tokens": 512
+        }
+      }
+    },
+    {
+      "id": "output-1",
+      "type": "output_node",
+      "position": { "x": 640, "y": 120 },
+      "config": {
+        "name": "final_output",
+        "output_key": "result",
+        "format": "message"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-input-assistant",
+      "source": "input-1",
+      "source_port": "message:out",
+      "target": "assistant",
+      "target_port": "message:in",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    },
+    {
+      "id": "e-assistant-output",
+      "source": "assistant",
+      "source_port": "message:out",
+      "target": "output-1",
+      "target_port": "message:in",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    }
+  ]
+}

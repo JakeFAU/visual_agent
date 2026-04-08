@@ -31,7 +31,7 @@ func isWhileDoneEdge(edge graph.Edge) bool {
 }
 
 func isWhileDoneTarget(edge graph.Edge) bool {
-	return edge.TargetPort == "message:done" || edge.TargetPort == "out_done"
+	return edge.TargetPort == "message:done" || edge.TargetPort == "message:return" || edge.TargetPort == "out_done"
 }
 
 func isExecutionNode(node graph.Node) bool {
@@ -58,6 +58,11 @@ func defaultStateKey(node graph.Node) string {
 	default:
 		return ""
 	}
+}
+
+func usesStructuredOutput(node graph.Node) bool {
+	cfg, ok := node.Config.(graph.LLMNodeConfig)
+	return ok && cfg.ResponseMode == "json"
 }
 
 // NodeCompiler translates a specific graph node into its ADK representation
@@ -103,8 +108,6 @@ func (c *Compiler) Compile(g graph.Graph) (agent.Agent, error) {
 // CompileWithOptions mirrors Compile but allows the caller to override runtime
 // limits such as the maximum number of graph steps for a single execution.
 func (c *Compiler) CompileWithOptions(g graph.Graph, opts CompileOptions) (agent.Agent, error) {
-	fmt.Printf("[DEBUG] Starting compilation for graph: %s\n", g.Name)
-
 	outputMappings := make(map[string][]string)
 	toolsetMappings := make(map[string][]tool.Toolset)
 	toolboxResults := make(map[string][]tool.Toolset)
@@ -260,7 +263,6 @@ func (c *Compiler) CompileWithOptions(g graph.Graph, opts CompileOptions) (agent
 	// 1. Compile toolbox nodes so their toolsets can be attached to LLM nodes.
 	for _, node := range g.Nodes {
 		if node.Type == "toolbox" {
-			fmt.Printf("[DEBUG] Compiling toolbox node: %s\n", node.ID)
 			nc, ok := c.compilers[node.Type]
 			if !ok {
 				return nil, fmt.Errorf("no compiler registered for toolbox node type %s", node.Type)
@@ -272,7 +274,6 @@ func (c *Compiler) CompileWithOptions(g graph.Graph, opts CompileOptions) (agent
 			}
 			if toolsets, ok := res.([]tool.Toolset); ok {
 				toolboxResults[node.ID] = toolsets
-				fmt.Printf("[DEBUG] Toolbox %s compiled successfully with %d toolsets\n", node.ID, len(toolsets))
 			}
 		}
 	}
@@ -282,7 +283,6 @@ func (c *Compiler) CompileWithOptions(g graph.Graph, opts CompileOptions) (agent
 		if isToolboxEdge(edge) {
 			if toolsets, ok := toolboxResults[edge.Source]; ok {
 				toolsetMappings[edge.Target] = append(toolsetMappings[edge.Target], toolsets...)
-				fmt.Printf("[DEBUG] Wired toolbox %s to node %s\n", edge.Source, edge.Target)
 			}
 		}
 	}
@@ -293,11 +293,9 @@ func (c *Compiler) CompileWithOptions(g graph.Graph, opts CompileOptions) (agent
 
 	for _, node := range g.Nodes {
 		if !isExecutionNode(node) {
-			fmt.Printf("[DEBUG] Skipping node %s during execution pass (type: %s)\n", node.ID, node.Type)
 			continue
 		}
 
-		fmt.Printf("[DEBUG] Compiling execution node: %s (type: %s)\n", node.ID, node.Type)
 		nc, ok := c.compilers[node.Type]
 		if !ok {
 			return nil, fmt.Errorf("no compiler registered for node type %s", node.Type)
@@ -316,7 +314,6 @@ func (c *Compiler) CompileWithOptions(g graph.Graph, opts CompileOptions) (agent
 
 		res, err := nc.Compile(node, metadata)
 		if err != nil {
-			fmt.Printf("[DEBUG] Failed to compile node %s: %v\n", node.ID, err)
 			return nil, fmt.Errorf("failed to compile node %s: %w", node.ID, err)
 		}
 
@@ -331,15 +328,14 @@ func (c *Compiler) CompileWithOptions(g graph.Graph, opts CompileOptions) (agent
 			agent:                   a,
 			nextNodeID:              staticNextMappings[node.ID],
 			stateKey:                defaultStateKey(node),
+			structuredOutput:        usesStructuredOutput(node),
 			outputKeys:              outputMappings[node.ID],
 			allowTerminalNoTransfer: doneTerminalMappings[node.ID],
 		}
 		subAgents = append(subAgents, a)
-		fmt.Printf("[DEBUG] Node %s compiled to agent successfully\n", node.ID)
 	}
 
 	if len(compiledNodes) == 0 {
-		fmt.Printf("[DEBUG] No execution agents found in graph\n")
 		return nil, fmt.Errorf("no execution nodes found in graph")
 	}
 
@@ -348,7 +344,6 @@ func (c *Compiler) CompileWithOptions(g graph.Graph, opts CompileOptions) (agent
 		maxSteps = maxInt(len(compiledNodes)*32, 512)
 	}
 
-	fmt.Printf("[DEBUG] Building graph runtime with %d execution agents\n", len(compiledNodes))
 	return newGraphRuntimeAgent(g.Name, compiledGraph{
 		startNodeID:       startNodeID,
 		nodes:             compiledNodes,
