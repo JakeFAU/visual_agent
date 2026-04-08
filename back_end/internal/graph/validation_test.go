@@ -189,6 +189,71 @@ func TestGraphValidateAcceptsWhileDoneBranchToOutputNode(t *testing.T) {
 	}
 }
 
+func TestGraphValidateAcceptsWhileDoneBranchToOutputNodeWithReturnAlias(t *testing.T) {
+	g := Graph{
+		Version: SupportedGraphVersion,
+		Name:    "While Container Output Return Alias",
+		Nodes: []Node{
+			{
+				ID:   "input-1",
+				Type: "input_node",
+				Config: InputNodeConfig{
+					Name:        "user_input",
+					Description: "User input",
+				},
+			},
+			{
+				ID:   "analyze",
+				Type: "llm_node",
+				Config: LLMNodeConfig{
+					Name:         "analyze",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "Analyze",
+					ResponseMode: "json",
+				},
+			},
+			{
+				ID:   "while-1",
+				Type: "while_node",
+				Config: WhileNodeConfig{
+					Condition:     `state.analyze.status != "pass"`,
+					MaxIterations: 3,
+				},
+			},
+			{
+				ID:   "retry",
+				Type: "llm_node",
+				Config: LLMNodeConfig{
+					Name:         "retry",
+					Model:        "gemini-2.5-flash",
+					Instruction:  "Retry",
+					ResponseMode: "text",
+				},
+			},
+			{
+				ID:   "output-1",
+				Type: "output_node",
+				Config: OutputNodeConfig{
+					Name:      "final_output",
+					OutputKey: "result",
+					Format:    "message",
+				},
+			},
+		},
+		Edges: []Edge{
+			{ID: "e-input", Source: "input-1", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+			{ID: "e-analyze-done", Source: "analyze", SourcePort: "message", Target: "while-1", TargetPort: "message:return"},
+			{ID: "e-loop", Source: "while-1", SourcePort: "message:loop", Target: "retry", TargetPort: "message"},
+			{ID: "e-repeat", Source: "retry", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+			{ID: "e-done", Source: "while-1", SourcePort: "message:done", Target: "output-1", TargetPort: "message"},
+		},
+	}
+
+	if err := g.Validate(); err != nil {
+		t.Fatalf("expected while output graph using message:return to validate, got %v", err)
+	}
+}
+
 func TestGraphValidateRejectsWhileNodeWithoutPositiveMaxIterations(t *testing.T) {
 	g := Graph{
 		Version: SupportedGraphVersion,

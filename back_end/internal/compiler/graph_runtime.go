@@ -1,9 +1,11 @@
 package compiler
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"iter"
+	"strings"
 
 	"google.golang.org/adk/agent"
 	"google.golang.org/adk/model"
@@ -28,6 +30,7 @@ type compiledExecutionNode struct {
 	agent                   agent.Agent
 	nextNodeID              string
 	stateKey                string
+	structuredOutput        bool
 	outputKeys              []string
 	allowTerminalNoTransfer bool
 }
@@ -73,6 +76,11 @@ func newGraphRuntimeAgent(name string, graph compiledGraph, subAgents []agent.Ag
 						}
 						if event == nil {
 							continue
+						}
+
+						if err := normalizeStructuredStateDelta(node, event.Actions.StateDelta); err != nil {
+							yield(nil, fmt.Errorf("failed to normalize state delta for node %q: %w", node.id, err))
+							return
 						}
 
 						if err := applyStateDelta(ctx.Session().State(), event.Actions.StateDelta); err != nil {
@@ -183,6 +191,43 @@ func emitOutputAliases(
 	event.Author = node.agent.Name()
 	event.Actions.StateDelta = delta
 	return yield(event, nil), nil
+}
+
+func normalizeStructuredStateDelta(node compiledExecutionNode, delta map[string]any) error {
+	if !node.structuredOutput || node.stateKey == "" || len(delta) == 0 {
+		return nil
+	}
+
+	value, ok := delta[node.stateKey]
+	if !ok {
+		return nil
+	}
+
+	parsed, err := parseStructuredStateValue(value)
+	if err != nil {
+		return err
+	}
+	delta[node.stateKey] = parsed
+	return nil
+}
+
+func parseStructuredStateValue(value any) (any, error) {
+	text, ok := value.(string)
+	if !ok {
+		return value, nil
+	}
+
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return value, nil
+	}
+
+	var parsed any
+	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+		return nil, err
+	}
+
+	return parsed, nil
 }
 
 func applyStateDelta(state session.State, delta map[string]any) error {

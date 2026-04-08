@@ -1,0 +1,156 @@
+{
+  "version": "1.0",
+  "name": "Structured Router",
+  "nodes": [
+    {
+      "id": "input-1",
+      "type": "input_node",
+      "position": { "x": 40, "y": 220 },
+      "config": {
+        "name": "user_input",
+        "description": "Incoming support request."
+      }
+    },
+    {
+      "id": "classify",
+      "type": "llm_node",
+      "position": { "x": 320, "y": 160 },
+      "config": {
+        "name": "classify_ticket",
+        "description": "Classify a request into a support route.",
+        "model": "gemini-2.5-flash",
+        "instruction": "Classify the user's request into one of two routes: 'billing' or 'general'. Return JSON with keys route and reason.",
+        "response_mode": "json",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "route": { "type": "string" },
+            "reason": { "type": "string" }
+          },
+          "required": ["route", "reason"]
+        },
+        "generate_content_config": {
+          "temperature": 0.1,
+          "max_output_tokens": 256
+        }
+      }
+    },
+    {
+      "id": "route-gate",
+      "type": "if_else_node",
+      "position": { "x": 620, "y": 190 },
+      "config": {
+        "condition_language": "CEL",
+        "condition": "state.classify_ticket.route == 'billing'"
+      }
+    },
+    {
+      "id": "billing-agent",
+      "type": "llm_node",
+      "position": { "x": 920, "y": 90 },
+      "config": {
+        "name": "billing_specialist",
+        "description": "Respond to billing questions.",
+        "model": "gemini-2.5-flash",
+        "instruction": "Answer the billing question using a calm, direct support tone.",
+        "response_mode": "text",
+        "generate_content_config": {
+          "temperature": 0.2,
+          "max_output_tokens": 512
+        }
+      }
+    },
+    {
+      "id": "general-agent",
+      "type": "llm_node",
+      "position": { "x": 920, "y": 300 },
+      "config": {
+        "name": "general_specialist",
+        "description": "Respond to general questions.",
+        "model": "gemini-2.5-flash",
+        "instruction": "Answer the request as a general support specialist.",
+        "response_mode": "text",
+        "generate_content_config": {
+          "temperature": 0.3,
+          "max_output_tokens": 512
+        }
+      }
+    },
+    {
+      "id": "billing-output",
+      "type": "output_node",
+      "position": { "x": 1220, "y": 90 },
+      "config": {
+        "name": "billing_result",
+        "output_key": "result",
+        "format": "message"
+      }
+    },
+    {
+      "id": "general-output",
+      "type": "output_node",
+      "position": { "x": 1220, "y": 300 },
+      "config": {
+        "name": "general_result",
+        "output_key": "result",
+        "format": "message"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-input-classify",
+      "source": "input-1",
+      "source_port": "message:out",
+      "target": "classify",
+      "target_port": "message:in",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    },
+    {
+      "id": "e-classify-route",
+      "source": "classify",
+      "source_port": "message:out",
+      "target": "route-gate",
+      "target_port": "message:in",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    },
+    {
+      "id": "e-route-billing",
+      "source": "route-gate",
+      "source_port": "message:true",
+      "target": "billing-agent",
+      "target_port": "message:in",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    },
+    {
+      "id": "e-route-general",
+      "source": "route-gate",
+      "source_port": "message:false",
+      "target": "general-agent",
+      "target_port": "message:in",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    },
+    {
+      "id": "e-billing-output",
+      "source": "billing-agent",
+      "source_port": "message:out",
+      "target": "billing-output",
+      "target_port": "message:in",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    },
+    {
+      "id": "e-general-output",
+      "source": "general-agent",
+      "source_port": "message:out",
+      "target": "general-output",
+      "target_port": "message:in",
+      "data_type": "message",
+      "edge_kind": "data_flow"
+    }
+  ]
+}

@@ -238,13 +238,14 @@ export interface GraphState {
 
   // Actions
   setSelectedNodeId: (nodeId: string | null) => void;
+  setName: (name: string) => void;
   updateNodeConfig: (nodeId: string, config: any) => void;
   addNode: (type: string, position: { x: number, y: number }) => void;
   clearGraph: () => void;
 
   // Contract Serialization
   exportGraph: () => Graph;
-  importGraph: (data: any) => void;
+  importGraph: (data: any) => boolean;
   validateGraph: () => boolean;
 }
 
@@ -482,6 +483,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   setSelectedNodeId: (nodeId) => set({ selectedNodeId: nodeId }),
 
+  setName: (name) => set({ name }),
+
   updateNodeConfig: (nodeId, config) => {
     set({
       nodes: get().nodes.map((node) =>
@@ -564,7 +567,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     });
   },
 
-  clearGraph: () => set({ nodes: [], edges: [], name: 'New Workflow', validationErrors: [] }),
+  clearGraph: () => set({ nodes: [], edges: [], name: 'New Workflow', validationErrors: [], selectedNodeId: null }),
 
   exportGraph: () => {
     const { nodes, edges, version, name } = get();
@@ -623,12 +626,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         version: validated.version,
         name: validated.name,
         validationErrors: [],
+        selectedNodeId: null,
       });
+      return true;
     } catch (err: any) {
       console.error("Import failed:", err);
       if (err.errors) {
         set({ validationErrors: err.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`) });
       }
+      return false;
     }
   },
 

@@ -51,6 +51,10 @@ type LoopTestCompiler struct {
 	runCounts map[string]int
 }
 
+type JSONBranchTestCompiler struct {
+	runCounts map[string]int
+}
+
 func (c *CaptureCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
 	c.lastMetadata = metadata
 	return agent.New(agent.Config{Name: node.ID})
@@ -102,6 +106,41 @@ func (c *LoopTestCompiler) Compile(node graph.Node, metadata map[string]interfac
 				case "done":
 					event.Actions.StateDelta = map[string]any{
 						stateKey: "Failures resolved",
+					}
+				default:
+					event.Actions.StateDelta = map[string]any{
+						stateKey: cfg.Name,
+					}
+				}
+
+				yield(event, nil)
+			}
+		},
+	})
+}
+
+func (c *JSONBranchTestCompiler) Compile(node graph.Node, metadata map[string]interface{}) (any, error) {
+	cfg, ok := node.Config.(graph.LLMNodeConfig)
+	if !ok {
+		return nil, fmt.Errorf("expected llm config, got %T", node.Config)
+	}
+
+	stateKey, _ := metadata["state_key"].(string)
+	if c.runCounts == nil {
+		c.runCounts = make(map[string]int)
+	}
+
+	return agent.New(agent.Config{
+		Name: cfg.Name,
+		Run: func(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
+			return func(yield func(*session.Event, error) bool) {
+				c.runCounts[cfg.Name]++
+
+				event := session.NewEvent(ctx.InvocationID())
+				switch cfg.Name {
+				case "classify_ticket":
+					event.Actions.StateDelta = map[string]any{
+						stateKey: `{"route":"billing","reason":"classified as payroll/billing"}`,
 					}
 				default:
 					event.Actions.StateDelta = map[string]any{
@@ -270,6 +309,94 @@ func TestCompileIfElse(t *testing.T) {
 
 	if compiled == nil {
 		t.Fatal("Expected compiled agent, got nil")
+	}
+}
+
+func TestCompileIfElseReadsStructuredJSONState(t *testing.T) {
+	g := graph.Graph{
+		Version: "1.0",
+		Name:    "structured_branching_workflow",
+		Nodes: []graph.Node{
+			{
+				ID:   "input-1",
+				Type: "input_node",
+				Config: graph.InputNodeConfig{
+					Name:        "user_input",
+					Description: "User input",
+				},
+			},
+			{
+				ID:   "classify",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "classify_ticket",
+					Model:        "mock-model",
+					Instruction:  "classify",
+					ResponseMode: "json",
+				},
+			},
+			{
+				ID:   "route-gate",
+				Type: "if_else_node",
+				Config: graph.IfElseNodeConfig{
+					ConditionLanguage: "CEL",
+					Condition:         `state.classify_ticket.route == "billing"`,
+				},
+			},
+			{
+				ID:   "billing-node",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "billing_agent",
+					Model:        "mock-model",
+					Instruction:  "billing",
+					ResponseMode: "text",
+				},
+			},
+			{
+				ID:   "general-node",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "general_agent",
+					Model:        "mock-model",
+					Instruction:  "general",
+					ResponseMode: "text",
+				},
+			},
+		},
+		Edges: []graph.Edge{
+			{ID: "e-input", Source: "input-1", SourcePort: "message", Target: "classify", TargetPort: "message"},
+			{ID: "e-classify-gate", Source: "classify", SourcePort: "message", Target: "route-gate", TargetPort: "message"},
+			{ID: "e-true", Source: "route-gate", SourcePort: "message:true", Target: "billing-node", TargetPort: "message"},
+			{ID: "e-false", Source: "route-gate", SourcePort: "message:false", Target: "general-node", TargetPort: "message"},
+		},
+	}
+
+	c := New()
+	branchCompiler := &JSONBranchTestCompiler{}
+	c.Register("llm_node", branchCompiler)
+	c.Register("if_else_node", &IfElseNodeCompiler{})
+
+	compiled, err := c.Compile(g)
+	if err != nil {
+		t.Fatalf("Compilation failed: %v", err)
+	}
+
+	rt := runtime.NewLocalRuntime()
+	for event, err := range rt.Execute(context.Background(), compiled, "Where is my paycheck?") {
+		if err != nil {
+			t.Fatalf("Execution failed: %v", err)
+		}
+		if event == nil {
+			continue
+		}
+	}
+
+	if branchCompiler.runCounts["billing_agent"] != 1 {
+		t.Fatalf("billing branch run count mismatch: got %d want 1", branchCompiler.runCounts["billing_agent"])
+	}
+	if branchCompiler.runCounts["general_agent"] != 0 {
+		t.Fatalf("general branch run count mismatch: got %d want 0", branchCompiler.runCounts["general_agent"])
 	}
 }
 
@@ -547,6 +674,108 @@ func TestCompileExecutesWhileLoopWithContainerOutput(t *testing.T) {
 		Edges: []graph.Edge{
 			{ID: "e-input", Source: "input-1", SourcePort: "message", Target: "analyze", TargetPort: "message"},
 			{ID: "e-analyze-out", Source: "analyze", SourcePort: "message", Target: "loop-gate", TargetPort: "message:done"},
+			{ID: "e-while-loop", Source: "loop-gate", SourcePort: "message:loop", Target: "retry", TargetPort: "message"},
+			{ID: "e-while-done", Source: "loop-gate", SourcePort: "message:done", Target: "output-1", TargetPort: "message"},
+			{ID: "e-retry-loop", Source: "retry", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+		},
+	}
+
+	c := New()
+	loopCompiler := &LoopTestCompiler{}
+	c.Register("llm_node", loopCompiler)
+	c.Register("while_node", &WhileNodeCompiler{})
+
+	compiled, err := c.Compile(g)
+	if err != nil {
+		t.Fatalf("Compilation failed: %v", err)
+	}
+
+	rt := runtime.NewLocalRuntime()
+	var gotResult map[string]any
+	for event, err := range rt.Execute(context.Background(), compiled, "fix it") {
+		if err != nil {
+			t.Fatalf("Execution failed: %v", err)
+		}
+		if event == nil {
+			continue
+		}
+		if value, ok := event.Actions.StateDelta["result"].(map[string]any); ok {
+			gotResult = value
+		}
+	}
+
+	if gotResult == nil {
+		t.Fatal("expected while container output to populate result")
+	}
+	if gotResult["status"] != "pass" {
+		t.Fatalf("result status mismatch: got %v want %q", gotResult["status"], "pass")
+	}
+	if gotResult["iteration"] != 2 {
+		t.Fatalf("result iteration mismatch: got %v want %d", gotResult["iteration"], 2)
+	}
+
+	if loopCompiler.runCounts["analyze"] != 2 {
+		t.Fatalf("analyze run count mismatch: got %d want 2", loopCompiler.runCounts["analyze"])
+	}
+	if loopCompiler.runCounts["retry"] != 1 {
+		t.Fatalf("retry run count mismatch: got %d want 1", loopCompiler.runCounts["retry"])
+	}
+}
+
+func TestCompileExecutesWhileLoopWithContainerOutputUsingReturnAlias(t *testing.T) {
+	g := graph.Graph{
+		Version: "1.0",
+		Name:    "while_output_return_alias_workflow",
+		Nodes: []graph.Node{
+			{
+				ID:   "input-1",
+				Type: "input_node",
+				Config: graph.InputNodeConfig{
+					Name:        "user_input",
+					Description: "User input",
+				},
+			},
+			{
+				ID:   "analyze",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "analyze",
+					Model:        "mock-model",
+					Instruction:  "analyze",
+					ResponseMode: "json",
+				},
+			},
+			{
+				ID:   "loop-gate",
+				Type: "while_node",
+				Config: graph.WhileNodeConfig{
+					Condition:     `state.analyze.status != "pass"`,
+					MaxIterations: 3,
+				},
+			},
+			{
+				ID:   "retry",
+				Type: "llm_node",
+				Config: graph.LLMNodeConfig{
+					Name:         "retry",
+					Model:        "mock-model",
+					Instruction:  "retry",
+					ResponseMode: "text",
+				},
+			},
+			{
+				ID:   "output-1",
+				Type: "output_node",
+				Config: graph.OutputNodeConfig{
+					Name:      "final_output",
+					OutputKey: "result",
+					Format:    "message",
+				},
+			},
+		},
+		Edges: []graph.Edge{
+			{ID: "e-input", Source: "input-1", SourcePort: "message", Target: "analyze", TargetPort: "message"},
+			{ID: "e-analyze-out", Source: "analyze", SourcePort: "message", Target: "loop-gate", TargetPort: "message:return"},
 			{ID: "e-while-loop", Source: "loop-gate", SourcePort: "message:loop", Target: "retry", TargetPort: "message"},
 			{ID: "e-while-done", Source: "loop-gate", SourcePort: "message:done", Target: "output-1", TargetPort: "message"},
 			{ID: "e-retry-loop", Source: "retry", SourcePort: "message", Target: "analyze", TargetPort: "message"},

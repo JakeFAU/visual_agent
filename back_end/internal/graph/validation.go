@@ -342,7 +342,7 @@ func isWhileDoneEdge(edge Edge) bool {
 }
 
 func isWhileDoneTarget(edge Edge) bool {
-	return edge.TargetPort == "message:done" || edge.TargetPort == "out_done"
+	return edge.TargetPort == "message:done" || edge.TargetPort == "message:return" || edge.TargetPort == "out_done"
 }
 
 func countWhileDoneProducers(whileNodeID string, nodeIDs map[string]Node, incoming map[string][]Edge) int {

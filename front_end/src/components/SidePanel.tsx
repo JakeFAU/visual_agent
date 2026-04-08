@@ -3,7 +3,6 @@ import { useGraphStore } from '../store/useGraphStore';
 import { Accordion } from './ui/Accordion';
 import { ToolListEditor } from './editors/ToolListEditor';
 import { MCPServerEditor } from './editors/MCPServerEditor';
-import { CustomFunctionEditor } from './editors/CustomFunctionEditor';
 import { SchemaFieldBuilder } from './editors/SchemaFieldBuilder';
 
 export const SidePanel: React.FC = () => {
@@ -127,11 +126,23 @@ export const SidePanel: React.FC = () => {
                 onChange={(servers) => handleChange('mcp_servers', servers)}
               />
             </Accordion>
-            <Accordion title="Custom Functions" count={config.custom_functions.length}>
-              <CustomFunctionEditor
-                functions={config.custom_functions}
-                onChange={(functions) => handleChange('custom_functions', functions)}
-              />
+            <Accordion title="Custom Functions (TODO)" count={config.custom_functions.length}>
+              <div className="rounded-md border border-amber-500/20 bg-amber-950/20 p-3 text-xs leading-5 text-amber-100/85">
+                Custom function declarations are not executable yet.
+                They remain a planned feature and are intentionally excluded from the runtime for now.
+              </div>
+              {config.custom_functions.length > 0 && (
+                <div className="space-y-2">
+                  {config.custom_functions.map((fn: { name: string; description?: string }, index: number) => (
+                    <div key={`${fn.name}-${index}`} className="rounded-md border border-gray-700 bg-gray-800/40 p-3">
+                      <div className="text-sm font-semibold text-gray-100">{fn.name}</div>
+                      <div className="mt-1 text-[11px] text-gray-400">
+                        {fn.description?.trim() || 'No description provided.'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </Accordion>
           </div>
         )}
